@@ -17,12 +17,19 @@ import (
 	"github.com/Xpra-org/go-xpra/x11"
 )
 
+const version = "0.1.1"
+
 func main() {
 	log.SetFlags(log.Ltime)
 	verbose := flag.Bool("v", false, "log every packet and window event")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Usage = usage
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Printf("go-xpra %s\n", version)
+		return
+	}
 	if flag.NArg() != 1 {
 		usage()
 		os.Exit(2)
