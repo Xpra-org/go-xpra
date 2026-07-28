@@ -155,6 +155,8 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleNotificationClose(packet)
 	case "show-desktop":
 		c.handleShowDesktop(packet)
+	case "cursor":
+		c.handleCursor(packet)
 
 	case "window-create":
 		c.handleNewWindow(packet, false)
@@ -246,6 +248,46 @@ func (c *Client) handleShowDesktop(packet protocol.Packet) {
 	c.debugf("show-desktop: %v", show)
 	for _, window := range c.windows {
 		window.Minimize(show)
+	}
+}
+
+// handleCursor applies the session-wide pointer shape. The backwards-
+// compatible packet is
+// [encoding, x, y, width, height, xhot, yhot, serial, pixels, name, ...].
+// A two-item packet asks for the platform default cursor instead.
+func (c *Client) handleCursor(packet protocol.Packet) {
+	if len(packet) <= 2 {
+		if err := c.display.SetCursor(nil); err != nil {
+			log.Printf("restoring the default cursor: %v", err)
+		}
+		return
+	}
+	if len(packet) < 10 {
+		log.Printf("ignoring malformed cursor packet")
+		return
+	}
+	encoding := packet.Str(1)
+	if colon := strings.LastIndexByte(encoding, ':'); colon >= 0 {
+		encoding = encoding[colon+1:]
+	}
+	if encoding != "png" {
+		c.debugf("ignoring cursor with unsupported encoding %q", encoding)
+		return
+	}
+	data, ok := packet.Bytes(9)
+	if !ok {
+		log.Printf("ignoring cursor packet with no pixel data")
+		return
+	}
+	cursor, err := decodeCursorPNG(data)
+	if err != nil {
+		log.Printf("decoding cursor: %v", err)
+		return
+	}
+	cursor.HotspotX = min(max(int(packet.Int(6)), 0), cursor.Width-1)
+	cursor.HotspotY = min(max(int(packet.Int(7)), 0), cursor.Height-1)
+	if err := c.display.SetCursor(cursor); err != nil {
+		log.Printf("setting cursor: %v", err)
 	}
 }
 

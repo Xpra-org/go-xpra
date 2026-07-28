@@ -23,6 +23,11 @@ const maxImageDimension = 16384
 // separately by the protocol reader.
 const maxDecodedImageBytes = 256 << 20
 
+// Cursor images are tiny in normal use. Keeping a separate bound prevents a
+// malicious peer from turning a cursor update into a very large native desktop
+// resource while still allowing unusually large HiDPI cursors.
+const maxCursorDimension = 1024
+
 // decodeImage decodes one complete JPEG, PNG or WebP damage rectangle into the
 // BGRX layout consumed by both desktop backends.
 //
@@ -86,4 +91,42 @@ func decodeImage(coding string, data []byte, width, height int) ([]byte, int, er
 		}
 	}
 	return pixels, stride, nil
+}
+
+// decodeCursorPNG preserves the PNG alpha channel, unlike ordinary window
+// damage which is deliberately made opaque. RGBA reports premultiplied colour
+// components, yielding the BGRA representation both native backends consume.
+func decodeCursorPNG(data []byte) (*ui.Cursor, error) {
+	config, err := png.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decoding png header: %w", err)
+	}
+	if config.Width <= 0 || config.Height <= 0 ||
+		config.Width > maxCursorDimension || config.Height > maxCursorDimension {
+		return nil, fmt.Errorf("png cursor size %dx%d is outside the 1..%d limit",
+			config.Width, config.Height, maxCursorDimension)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decoding png pixels: %w", err)
+	}
+	bounds := img.Bounds()
+	if bounds.Dx() != config.Width || bounds.Dy() != config.Height {
+		return nil, fmt.Errorf("decoded png cursor is %dx%d, header says %dx%d",
+			bounds.Dx(), bounds.Dy(), config.Width, config.Height)
+	}
+	pixels := make([]byte, config.Width*config.Height*ui.BytesPerPixel)
+	for y := range config.Height {
+		for x := range config.Width {
+			r, g, b, a := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
+			i := (y*config.Width + x) * ui.BytesPerPixel
+			pixels[i], pixels[i+1], pixels[i+2], pixels[i+3] =
+				byte(b>>8), byte(g>>8), byte(r>>8), byte(a>>8)
+		}
+	}
+	return &ui.Cursor{
+		Pixels: pixels,
+		Width:  config.Width,
+		Height: config.Height,
+	}, nil
 }

@@ -117,6 +117,17 @@ func TestBuildHello(t *testing.T) {
 	if !got.Bool("show-desktop") {
 		t.Error("show-desktop must be enabled to receive minimize and restore requests")
 	}
+	cursor := got.Dict("cursor")
+	if cursor == nil || !cursor.Bool("backwards-compatible") {
+		t.Error("the backwards-compatible cursor capability must be enabled")
+	}
+	cursorEncodings, _ := cursor["encodings"].([]any)
+	if len(cursorEncodings) != 1 || cursorEncodings[0] != "png" {
+		t.Errorf("cursor encodings = %v, want [png]", cursorEncodings)
+	}
+	if !got.Bool("cursors") {
+		t.Error("the legacy cursors capability must be enabled")
+	}
 	if !got.Bool("notification") {
 		t.Error("the modern notification capability must be enabled")
 	}

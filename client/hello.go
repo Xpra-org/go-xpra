@@ -36,7 +36,7 @@ const challengeSaltLen = 32
 // The shape here is load-bearing in ways that are not obvious, so the
 // non-obvious keys carry the server-side reference that explains them. Anything
 // not advertised is simply never sent to us, which is how this client avoids
-// having to handle cursors, icons, clipboard and audio at all.
+// having to handle icons, clipboard and audio at all.
 func buildHello(username string) rencodeplus.Dict {
 	caps := rencodeplus.Dict{
 		{Key: "version", Value: clientVersion},
@@ -67,6 +67,15 @@ func buildHello(username string) rencodeplus.Dict {
 		{Key: "bell", Value: true},
 		{Key: "show-desktop", Value: true},
 		{Key: "ping", Value: true},
+
+		// Request PNG cursor forwarding. "backwards-compatible" selects the
+		// established cursor packet shape handled by this client; the plural
+		// boolean is the gate used by older servers.
+		{Key: "cursor", Value: rencodeplus.Dict{
+			{Key: "encodings", Value: []string{"png"}},
+			{Key: "backwards-compatible", Value: true},
+		}},
+		{Key: "cursors", Value: true},
 
 		// Receive desktop notifications for logging. The singular boolean is
 		// the modern capability; backwards-compatible servers read the nested

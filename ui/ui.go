@@ -16,6 +16,17 @@ package ui
 // and used as a map key; an X11 window id and a Win32 window handle both fit.
 type WindowID uintptr
 
+// Cursor is one session-wide pointer image.
+//
+// Pixels are tightly packed, alpha-premultiplied BGRA. That maps directly to
+// Win32's 32-bit cursor bitmaps and to X Render's usual little-endian ARGB32
+// representation; other X11 byte orders are converted by that backend.
+type Cursor struct {
+	Pixels             []byte
+	Width, Height      int
+	HotspotX, HotspotY int
+}
+
 // Display is a connection to the local desktop.
 type Display interface {
 	// NewWindow creates an unmapped top-level window whose content area is
@@ -33,6 +44,11 @@ type Display interface {
 	// Bell rings the local desktop bell for a remote application. Backends use
 	// whichever bell properties their platform can represent.
 	Bell(percent, pitch, duration int64, name string)
+
+	// SetCursor applies one session-wide pointer image to every forwarded
+	// window, including windows created later. A nil cursor restores the
+	// platform default.
+	SetCursor(cursor *Cursor) error
 
 	// Close tears down the connection and every window on it.
 	Close()

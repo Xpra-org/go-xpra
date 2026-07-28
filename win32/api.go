@@ -40,6 +40,11 @@ var (
 	procBeginPaint       = user32.NewProc("BeginPaint")
 	procEndPaint         = user32.NewProc("EndPaint")
 	procLoadCursor       = user32.NewProc("LoadCursorW")
+	procSetCursor        = user32.NewProc("SetCursor")
+	procCreateIcon       = user32.NewProc("CreateIconIndirect")
+	procDestroyCursor    = user32.NewProc("DestroyCursor")
+	procGetCursorPos     = user32.NewProc("GetCursorPos")
+	procWindowFromPoint  = user32.NewProc("WindowFromPoint")
 	procSetCapture       = user32.NewProc("SetCapture")
 	procReleaseCapture   = user32.NewProc("ReleaseCapture")
 	procGetKeyState      = user32.NewProc("GetKeyState")
@@ -50,6 +55,9 @@ var (
 	procSetDPIContext    = user32.NewProc("SetProcessDpiAwarenessContext")
 
 	procSetDIBitsToDevice = gdi32.NewProc("SetDIBitsToDevice")
+	procCreateDIBSection  = gdi32.NewProc("CreateDIBSection")
+	procCreateBitmap      = gdi32.NewProc("CreateBitmap")
+	procDeleteObject      = gdi32.NewProc("DeleteObject")
 )
 
 // Window and class styles.
@@ -85,6 +93,7 @@ const (
 	wmPaint            = 0x000F
 	wmClose            = 0x0010
 	wmEraseBkgnd       = 0x0014
+	wmSetCursor        = 0x0020
 	wmWindowPosChanged = 0x0047
 	wmPrintClient      = 0x0318
 	wmKeyDown          = 0x0100
@@ -103,11 +112,14 @@ const (
 	wmXButtonUp        = 0x020C
 	wmMouseHWheel      = 0x020E
 	wmApp              = 0x8000
+
+	htClient = 1
 )
 
 // Bitmap and keyboard constants.
 const (
 	biRGB        = 0
+	biBitfields  = 3
 	dibRGBColors = 0
 
 	mapvkVSCToVKEx = 3
@@ -167,6 +179,41 @@ type bitmapInfoHeader struct {
 	YPelsPerMeter int32
 	ClrUsed       uint32
 	ClrImportant  uint32
+}
+
+// bitmapV5Header is BITMAPV5HEADER. Its explicit channel masks make the alpha
+// channel unambiguous to CreateIconIndirect.
+type bitmapV5Header struct {
+	Size          uint32
+	Width         int32
+	Height        int32
+	Planes        uint16
+	BitCount      uint16
+	Compression   uint32
+	SizeImage     uint32
+	XPelsPerMeter int32
+	YPelsPerMeter int32
+	ClrUsed       uint32
+	ClrImportant  uint32
+	RedMask       uint32
+	GreenMask     uint32
+	BlueMask      uint32
+	AlphaMask     uint32
+	CSType        uint32
+	Endpoints     [36]byte
+	GammaRed      uint32
+	GammaGreen    uint32
+	GammaBlue     uint32
+	Intent        uint32
+	ProfileData   uint32
+	ProfileSize   uint32
+	Reserved      uint32
+}
+
+type iconInfo struct {
+	Icon               int32
+	HotspotX, HotspotY uint32
+	Mask, Color        syscall.Handle
 }
 
 // The wrappers below all follow the same shape: the Win32 call reports failure
@@ -285,6 +332,60 @@ func endPaint(hwnd syscall.Handle, ps *paintStruct) {
 
 func loadCursor(id uintptr) syscall.Handle {
 	r, _, _ := procLoadCursor.Call(0, id)
+	return syscall.Handle(r)
+}
+
+func setCursor(cursor syscall.Handle) {
+	procSetCursor.Call(uintptr(cursor))
+}
+
+func createDIBSection(info unsafe.Pointer, bits *unsafe.Pointer) (syscall.Handle, error) {
+	r, _, err := procCreateDIBSection.Call(0, uintptr(info), dibRGBColors,
+		uintptr(unsafe.Pointer(bits)), 0, 0)
+	if r == 0 {
+		return 0, fmt.Errorf("CreateDIBSection: %w", err)
+	}
+	return syscall.Handle(r), nil
+}
+
+func createBitmap(width, height int32, planes, bitsPerPixel uint32, bits unsafe.Pointer) (syscall.Handle, error) {
+	r, _, err := procCreateBitmap.Call(uintptr(width), uintptr(height), uintptr(planes),
+		uintptr(bitsPerPixel), uintptr(bits))
+	if r == 0 {
+		return 0, fmt.Errorf("CreateBitmap: %w", err)
+	}
+	return syscall.Handle(r), nil
+}
+
+func createIconIndirect(info *iconInfo) (syscall.Handle, error) {
+	r, _, err := procCreateIcon.Call(uintptr(unsafe.Pointer(info)))
+	if r == 0 {
+		return 0, fmt.Errorf("CreateIconIndirect: %w", err)
+	}
+	return syscall.Handle(r), nil
+}
+
+func destroyCursor(cursor syscall.Handle) {
+	procDestroyCursor.Call(uintptr(cursor))
+}
+
+func deleteObject(object syscall.Handle) {
+	procDeleteObject.Call(uintptr(object))
+}
+
+func getCursorPos(p *point) bool {
+	r, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(p)))
+	return r != 0
+}
+
+func windowFromPoint(p point) syscall.Handle {
+	var r uintptr
+	if unsafe.Sizeof(uintptr(0)) == 8 {
+		packed := uintptr(uint64(uint32(p.X)) | uint64(uint32(p.Y))<<32)
+		r, _, _ = procWindowFromPoint.Call(packed)
+	} else {
+		r, _, _ = procWindowFromPoint.Call(uintptr(uint32(p.X)), uintptr(uint32(p.Y)))
+	}
 	return syscall.Handle(r)
 }
 

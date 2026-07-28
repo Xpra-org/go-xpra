@@ -36,6 +36,7 @@ Pass `-v` to log every window event and unhandled packet type.
   override-redirect popups
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
 - pointer, keyboard and focus forwarding, with keys named the X11 way on both platforms
+- server-provided PNG pointer cursors, including hotspot changes and default-cursor resets
 - forwarded application bells using the native X11 or Win32 sound
 - desktop notification logging
 - server lifecycle event logging
@@ -45,7 +46,7 @@ Pass `-v` to log every window event and unhandled packet type.
 ## What it does not do
 
 Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
-audio, cursors, window icons, native notification popups, system tray, keymap upload, and the
+audio, window icons, native notification popups, system tray, keymap upload, and the
 `ssl`/`ws`/`wss`/`ssh` transports. Linux and Windows only — no Wayland and no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs

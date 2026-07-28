@@ -5,6 +5,7 @@ package x11
 import (
 	"fmt"
 
+	"github.com/jezek/xgb/render"
 	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgbutil"
 	"github.com/jezek/xgbutil/keybind"
@@ -32,6 +33,13 @@ type Display struct {
 	// maxImageBytes is how much pixel data fits in a single PutImage request.
 	maxImageBytes int
 
+	// cursorFormat is the X Render ARGB32 format used to build server-provided
+	// colour cursors. cursor is kept alive so newly created windows can inherit
+	// the same session-wide shape.
+	cursorFormat render.Pictformat
+	cursor       xproto.Cursor
+	windows      map[xproto.Window]*Window
+
 	events chan ui.Event
 	done   chan struct{}
 }
@@ -49,9 +57,10 @@ func Open() (*Display, error) {
 	keybind.Initialize(X)
 
 	d := &Display{
-		X:      X,
-		events: make(chan ui.Event, 256),
-		done:   make(chan struct{}),
+		X:       X,
+		windows: map[xproto.Window]*Window{},
+		events:  make(chan ui.Event, 256),
+		done:    make(chan struct{}),
 	}
 	if d.wmProtocols, err = xprop.Atm(X, "WM_PROTOCOLS"); err != nil {
 		return nil, fmt.Errorf("interning WM_PROTOCOLS: %w", err)
@@ -60,6 +69,9 @@ func Open() (*Display, error) {
 		return nil, fmt.Errorf("interning WM_DELETE_WINDOW: %w", err)
 	}
 	if err := d.createGC(); err != nil {
+		return nil, err
+	}
+	if err := d.initCursorFormat(); err != nil {
 		return nil, err
 	}
 

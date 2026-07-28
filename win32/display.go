@@ -47,6 +47,10 @@ type Display struct {
 	helper  syscall.Handle
 	windows map[syscall.Handle]*Window
 	held    int // pointer buttons currently down, for mouse capture
+	cursor  syscall.Handle
+	// cursorOwned distinguishes CreateIconIndirect cursors from the shared
+	// system arrow, which must never be destroyed by this process.
+	cursorOwned bool
 
 	calls      chan func()
 	events     chan ui.Event
@@ -106,6 +110,49 @@ func (d *Display) Bell(_percent, pitch, duration int64, _name string) {
 	go beep(uint32(pitch), uint32(duration))
 }
 
+// SetCursor swaps the session-wide native cursor on the window thread. Every
+// forwarded window reads this field from WM_SETCURSOR, so existing and future
+// windows change together while title bars retain their normal system cursors.
+func (d *Display) SetCursor(image *ui.Cursor) error {
+	var cursorErr error
+	if err := d.call(func() {
+		next := loadCursor(idcArrow)
+		owned := false
+		if image != nil {
+			next, cursorErr = createNativeCursor(image)
+			if cursorErr != nil {
+				return
+			}
+			owned = true
+		}
+		old, oldOwned := d.cursor, d.cursorOwned
+		d.cursor, d.cursorOwned = next, owned
+
+		// WM_SETCURSOR will handle the next pointer movement. If the pointer is
+		// captured or already over one of our client areas, update it now too.
+		if d.held > 0 {
+			setCursor(next)
+		} else {
+			var p point
+			if getCursorPos(&p) {
+				if w, ok := d.windows[windowFromPoint(p)]; ok {
+					x, y, width, height, valid := clientGeometry(w.hwnd)
+					if valid && int(p.X) >= x && int(p.X) < x+width &&
+						int(p.Y) >= y && int(p.Y) < y+height {
+						setCursor(next)
+					}
+				}
+			}
+		}
+		if oldOwned {
+			destroyCursor(old)
+		}
+	}); err != nil {
+		return err
+	}
+	return cursorErr
+}
+
 // Close ends the message loop, which destroys every window with it.
 func (d *Display) Close() {
 	d.once.Do(func() {
@@ -128,6 +175,11 @@ func (d *Display) windowThread(started chan<- error) {
 		started <- err
 		return
 	}
+	defer func() {
+		if d.cursorOwned {
+			destroyCursor(d.cursor)
+		}
+	}()
 	started <- nil
 
 	var m msg
@@ -145,13 +197,16 @@ func (d *Display) setup() error {
 	}
 	d.instance = instance
 
+	d.cursor = loadCursor(idcArrow)
 	class := wndClassEx{
 		// Redrawing the whole window when it changes size is what fills in the
 		// new edge, which no damage rectangle has covered yet.
-		Style:     csHRedraw | csVRedraw,
-		WndProc:   syscall.NewCallback(d.windowProc),
-		Instance:  instance,
-		Cursor:    loadCursor(idcArrow),
+		Style:    csHRedraw | csVRedraw,
+		WndProc:  syscall.NewCallback(d.windowProc),
+		Instance: instance,
+		// WM_SETCURSOR chooses the session cursor for client areas. Leaving the
+		// class cursor empty prevents Windows from replacing it on mouse moves.
+		Cursor:    0,
 		ClassName: d.class,
 	}
 	class.Size = uint32(unsafe.Sizeof(class))
@@ -282,6 +337,12 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 		// Every pixel comes from the window's own buffer, which starts out
 		// black, so there is nothing to erase and erasing would only flicker.
 		return 1
+
+	case wmSetCursor:
+		if uint16(lparam) == htClient {
+			setCursor(d.cursor)
+			return 1
+		}
 
 	case wmWindowPosChanged:
 		if x, y, width, height, ok := clientGeometry(w.hwnd); ok {

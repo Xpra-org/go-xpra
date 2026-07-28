@@ -87,6 +87,15 @@ func (d *Display) NewWindow(x, y, width, height int, overrideRedirect bool) (ui.
 			return nil, fmt.Errorf("setting WM_PROTOCOLS: %w", err)
 		}
 	}
+	if d.cursor != 0 {
+		if err := xproto.ChangeWindowAttributesChecked(d.X.Conn(), win.Id,
+			xproto.CwCursor, []uint32{uint32(d.cursor)}).Check(); err != nil {
+			w.freePixmap()
+			win.Destroy()
+			return nil, fmt.Errorf("setting the initial cursor: %w", err)
+		}
+	}
+	d.windows[win.Id] = w
 	return w, nil
 }
 
@@ -140,6 +149,7 @@ func (w *Window) Minimize(minimized bool) {
 
 // Destroy releases the window and its pixmap.
 func (w *Window) Destroy() {
+	delete(w.d.windows, w.win.Id)
 	w.freePixmap()
 	w.win.Destroy()
 }
