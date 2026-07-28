@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/jezek/xgb"
@@ -44,19 +45,23 @@ type Client struct {
 
 	serverVersion string
 	challengeSeen bool
+	username      string
+	password      string
 	exitErr       error
 	quit          chan struct{}
 }
 
 // New builds a client over an established connection and X display.
-func New(conn *protocol.Conn, display *x11.Display, verbose bool) *Client {
+func New(conn *protocol.Conn, display *x11.Display, verbose bool, username, password string) *Client {
 	return &Client{
-		conn:    conn,
-		display: display,
-		verbose: verbose,
-		windows: map[int64]*x11.Window{},
-		byXID:   map[xproto.Window]int64{},
-		quit:    make(chan struct{}),
+		conn:     conn,
+		display:  display,
+		verbose:  verbose,
+		username: username,
+		password: password,
+		windows:  map[int64]*x11.Window{},
+		byXID:    map[xproto.Window]int64{},
+		quit:     make(chan struct{}),
 	}
 }
 
@@ -124,7 +129,7 @@ func (c *Client) debugf(format string, args ...any) {
 }
 
 func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
-	caps := buildHello()
+	caps := buildHello(c.username)
 	if challengeResponse != "" {
 		// The reply to a challenge is a second, complete hello carrying the
 		// response (xpra/client/base/client.py:359).
@@ -188,9 +193,12 @@ func (c *Client) handleChallenge(packet protocol.Packet) {
 	}
 	c.challengeSeen = true
 
-	pw := password()
+	pw := c.password
 	if pw == "" {
-		c.stop(errors.New("server requires a password: set XPRA_PASSWORD"))
+		pw = os.Getenv("XPRA_PASSWORD")
+	}
+	if pw == "" {
+		c.stop(errors.New("server requires a password: include it in the URL or set XPRA_PASSWORD"))
 		return
 	}
 	response, salt, err := challengeReply(packet, pw)

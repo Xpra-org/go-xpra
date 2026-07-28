@@ -36,7 +36,7 @@ const challengeSaltLen = 32
 // non-obvious keys carry the server-side reference that explains them. Anything
 // not advertised is simply never sent to us, which is how this client avoids
 // having to handle cursors, icons, notifications, clipboard and audio at all.
-func buildHello() rencodeplus.Dict {
+func buildHello(username string) rencodeplus.Dict {
 	caps := rencodeplus.Dict{
 		{Key: "version", Value: clientVersion},
 		{Key: "client_type", Value: "go"},
@@ -116,9 +116,12 @@ func buildHello() rencodeplus.Dict {
 	if host, err := os.Hostname(); err == nil {
 		caps.Set("hostname", host)
 	}
-	if user := os.Getenv("USER"); user != "" {
-		caps.Set("username", user)
-		caps.Set("user", user)
+	if username == "" {
+		username = os.Getenv("USER")
+	}
+	if username != "" {
+		caps.Set("username", username)
+		caps.Set("user", username)
 	}
 	return caps
 }
@@ -164,11 +167,6 @@ func hmacHex(key, message []byte) string {
 	mac := hmac.New(sha256.New, key)
 	mac.Write(message)
 	return hex.EncodeToString(mac.Sum(nil))
-}
-
-// password returns the password to answer a challenge with.
-func password() string {
-	return os.Getenv("XPRA_PASSWORD")
 }
 
 // machineUUID derives a stable per-machine identifier, falling back to a random

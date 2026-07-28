@@ -9,7 +9,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Xpra-org/go-xpra/client"
@@ -17,7 +20,16 @@ import (
 	"github.com/Xpra-org/go-xpra/x11"
 )
 
-const version = "0.1.1"
+const (
+	version        = "0.1.1"
+	defaultTCPPort = "14500"
+)
+
+type connectionURL struct {
+	address  string
+	username string
+	password string
+}
 
 func main() {
 	log.SetFlags(log.Ltime)
@@ -41,22 +53,26 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `usage: go-xpra [-v] HOST:PORT
+	fmt.Fprintf(os.Stderr, `usage: go-xpra [-v] tcp://[USERNAME[:PASSWORD]@]HOST[:PORT]/
 
 Connects to an xpra server over TCP and shows its windows on $DISPLAY.
+The default TCP port is 14500.
 
-Set XPRA_PASSWORD to authenticate against a password-protected server.
+When credentials are omitted from the URL, USER and XPRA_PASSWORD are used.
 
 Example:
   xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
-  go-xpra 127.0.0.1:14500
+  go-xpra tcp://127.0.0.1/
 
 `)
 	flag.PrintDefaults()
 }
 
-func run(address string, verbose bool) error {
-	address = normalizeAddress(address)
+func run(rawURL string, verbose bool) error {
+	target, err := parseConnectionURL(rawURL)
+	if err != nil {
+		return err
+	}
 
 	display, err := x11.Open()
 	if err != nil {
@@ -64,19 +80,64 @@ func run(address string, verbose bool) error {
 	}
 	defer display.Close()
 
-	conn, err := protocol.Dial(address)
+	conn, err := protocol.Dial(target.address)
 	if err != nil {
-		return fmt.Errorf("connecting to %s: %w", address, err)
+		return fmt.Errorf("connecting to %s: %w", target.address, err)
 	}
 	defer conn.Close()
 
-	log.Printf("connected to %s", address)
-	return client.New(conn, display, verbose).Run()
+	log.Printf("connected to %s", target.address)
+	return client.New(conn, display, verbose, target.username, target.password).Run()
 }
 
-// normalizeAddress accepts a bare host:port, and also tolerates a tcp:// URI
-// so that an address copied from xpra's own output works.
-func normalizeAddress(address string) string {
-	address = strings.TrimPrefix(address, "tcp://")
-	return strings.TrimSuffix(address, "/")
+// parseConnectionURL accepts the standard Xpra TCP URL form and returns the
+// socket address separately from credentials so passwords never reach logs.
+func parseConnectionURL(raw string) (connectionURL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		if parseErr, ok := err.(*url.Error); ok {
+			err = parseErr.Err
+		}
+		return connectionURL{}, fmt.Errorf("invalid Xpra URL: %w", err)
+	}
+	if !strings.EqualFold(u.Scheme, "tcp") {
+		if u.Scheme == "" {
+			return connectionURL{}, fmt.Errorf("invalid Xpra URL: a tcp:// URL is required")
+		}
+		return connectionURL{}, fmt.Errorf("unsupported Xpra URL protocol %q: only tcp is supported", u.Scheme)
+	}
+	if u.Opaque != "" || u.Host == "" {
+		return connectionURL{}, fmt.Errorf("invalid Xpra TCP URL: host is required")
+	}
+	if u.Path != "" && u.Path != "/" {
+		return connectionURL{}, fmt.Errorf("invalid Xpra TCP URL: path must be empty or /")
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return connectionURL{}, fmt.Errorf("invalid Xpra TCP URL: query and fragment are not supported")
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return connectionURL{}, fmt.Errorf("invalid Xpra TCP URL: host is required")
+	}
+	port := u.Port()
+	if port == "" {
+		if strings.HasSuffix(u.Host, ":") {
+			return connectionURL{}, fmt.Errorf("invalid Xpra TCP URL: port is empty")
+		}
+		port = defaultTCPPort
+	} else {
+		number, err := strconv.ParseUint(port, 10, 16)
+		if err != nil || number == 0 {
+			return connectionURL{}, fmt.Errorf("invalid Xpra TCP URL: port must be between 1 and 65535")
+		}
+		port = strconv.FormatUint(number, 10)
+	}
+
+	target := connectionURL{address: net.JoinHostPort(host, port)}
+	if u.User != nil {
+		target.username = u.User.Username()
+		target.password, _ = u.User.Password()
+	}
+	return target, nil
 }

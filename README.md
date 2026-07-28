@@ -10,11 +10,13 @@ is pure Go with no cgo.
 go build ./cmd/go-xpra
 
 xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
-./go-xpra 127.0.0.1:14500
+./go-xpra tcp://127.0.0.1/
 ```
 
-Pass `-v` to log every window event and unhandled packet type. Set `XPRA_PASSWORD` to connect to a
-server started with `--tcp-auth=password:value=...`.
+Connection URLs use Xpra's standard `tcp://[username[:password]@]host[:port]/` form. The port
+defaults to 14500. Other protocols are rejected because this client currently supports TCP only.
+Credentials can be included in the URL; omitted values fall back to `USER` and `XPRA_PASSWORD`.
+Pass `-v` to log every window event and unhandled packet type.
 
 ## What it does
 
@@ -78,7 +80,7 @@ rendering against the server's own display pixel for pixel:
 ```shell
 xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
 Xvfb :99 -screen 0 1280x800x24 &
-DISPLAY=:99 ./go-xpra 127.0.0.1:14500 &
+DISPLAY=:99 ./go-xpra tcp://127.0.0.1/ &
 
 DISPLAY=:100 import -window "$(DISPLAY=:100 xdotool search --class xterm | head -1)" ref.png
 DISPLAY=:99  import -window "$(DISPLAY=:99 xdotool search --name antoine | head -1)" ours.png

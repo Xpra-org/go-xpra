@@ -87,7 +87,7 @@ func TestChallengeReplyAcceptsSuffixedDigest(t *testing.T) {
 // The hello has to encode cleanly and carry the handful of keys the server
 // treats as mandatory.
 func TestBuildHello(t *testing.T) {
-	caps := buildHello()
+	caps := buildHello("")
 	encoded, err := rencodeplus.Encode([]any{"hello", caps})
 	if err != nil {
 		t.Fatalf("the hello does not encode: %v", err)
@@ -137,6 +137,35 @@ func TestBuildHello(t *testing.T) {
 	if got.Has("wants") {
 		t.Error("the hello must not carry a wants key")
 	}
+}
+
+func TestBuildHelloUsesExplicitUsername(t *testing.T) {
+	t.Setenv("USER", "environment-user")
+	got := buildHello("url-user")
+	if username := helloString(got, "username"); username != "url-user" {
+		t.Errorf("username = %q, want url-user", username)
+	}
+	if user := helloString(got, "user"); user != "url-user" {
+		t.Errorf("user = %q, want url-user", user)
+	}
+}
+
+func TestBuildHelloFallsBackToEnvironmentUsername(t *testing.T) {
+	t.Setenv("USER", "environment-user")
+	got := buildHello("")
+	if username := helloString(got, "username"); username != "environment-user" {
+		t.Errorf("username = %q, want environment-user", username)
+	}
+}
+
+func helloString(caps rencodeplus.Dict, key string) string {
+	for _, entry := range caps {
+		if entry.Key == key {
+			value, _ := entry.Value.(string)
+			return value
+		}
+	}
+	return ""
 }
 
 func TestMachineUUIDIsStable(t *testing.T) {
