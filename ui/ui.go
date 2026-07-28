@@ -12,6 +12,8 @@
 // really part of the xpra protocol vocabulary rather than of any one platform.
 package ui
 
+import "fmt"
+
 // WindowID identifies a window created by a backend. It is only ever compared
 // and used as a map key; an X11 window id and a Win32 window handle both fit.
 type WindowID uintptr
@@ -25,6 +27,29 @@ type Cursor struct {
 	Pixels             []byte
 	Width, Height      int
 	HotspotX, HotspotY int
+}
+
+// Validate reports whether a cursor is one the backends can carry.
+//
+// The pixels come from the server by way of a PNG decoder, so the dimensions
+// and the hotspot are only as trustworthy as the packet was. The 16-bit cap is
+// X11's wire limit for a cursor and Win32's for a bitmap; no real cursor comes
+// close to it.
+func (c *Cursor) Validate() error {
+	if c.Width <= 0 || c.Height <= 0 ||
+		c.Width > int(^uint16(0)) || c.Height > int(^uint16(0)) {
+		return fmt.Errorf("invalid cursor size %dx%d", c.Width, c.Height)
+	}
+	if len(c.Pixels) != c.Width*c.Height*BytesPerPixel {
+		return fmt.Errorf("cursor has %d pixel bytes, want %d",
+			len(c.Pixels), c.Width*c.Height*BytesPerPixel)
+	}
+	if c.HotspotX < 0 || c.HotspotX >= c.Width ||
+		c.HotspotY < 0 || c.HotspotY >= c.Height {
+		return fmt.Errorf("cursor hotspot %d,%d lies outside %dx%d",
+			c.HotspotX, c.HotspotY, c.Width, c.Height)
+	}
+	return nil
 }
 
 // Display is a connection to the local desktop.

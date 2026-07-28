@@ -63,7 +63,7 @@ func (d *Display) SetCursor(image *ui.Cursor) error {
 }
 
 func (d *Display) createCursor(image *ui.Cursor) (xproto.Cursor, error) {
-	if err := validateCursor(image); err != nil {
+	if err := image.Validate(); err != nil {
 		return 0, err
 	}
 	conn := d.X.Conn()
@@ -126,21 +126,4 @@ func (d *Display) createCursor(image *ui.Cursor) (xproto.Cursor, error) {
 		return 0, fmt.Errorf("creating a cursor: %w", err)
 	}
 	return cursor, nil
-}
-
-func validateCursor(cursor *ui.Cursor) error {
-	if cursor.Width <= 0 || cursor.Height <= 0 ||
-		cursor.Width > int(^uint16(0)) || cursor.Height > int(^uint16(0)) {
-		return fmt.Errorf("invalid cursor size %dx%d", cursor.Width, cursor.Height)
-	}
-	if len(cursor.Pixels) != cursor.Width*cursor.Height*ui.BytesPerPixel {
-		return fmt.Errorf("cursor has %d pixel bytes, want %d",
-			len(cursor.Pixels), cursor.Width*cursor.Height*ui.BytesPerPixel)
-	}
-	if cursor.HotspotX < 0 || cursor.HotspotX >= cursor.Width ||
-		cursor.HotspotY < 0 || cursor.HotspotY >= cursor.Height {
-		return fmt.Errorf("cursor hotspot %d,%d lies outside %dx%d",
-			cursor.HotspotX, cursor.HotspotY, cursor.Width, cursor.Height)
-	}
-	return nil
 }

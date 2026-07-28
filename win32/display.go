@@ -54,7 +54,7 @@ type Display struct {
 
 	calls      chan func()
 	events     chan ui.Event
-	eventQueue *eventQueue
+	eventQueue *ui.EventQueue
 	eventStop  chan struct{}
 	done       chan struct{}
 	once       sync.Once
@@ -77,7 +77,7 @@ func Open() (*Display, error) {
 		windows:    map[syscall.Handle]*Window{},
 		calls:      make(chan func(), 64),
 		events:     make(chan ui.Event),
-		eventQueue: newEventQueue(eventQueueSize),
+		eventQueue: ui.NewEventQueue(eventQueueSize),
 		eventStop:  make(chan struct{}),
 		done:       make(chan struct{}),
 	}
@@ -271,7 +271,7 @@ func (d *Display) runCalls() {
 // queue may discard only motion and configure events; input transitions remain
 // ordered and are always preserved.
 func (d *Display) emit(event ui.Event) {
-	d.eventQueue.push(event)
+	d.eventQueue.Push(event)
 }
 
 // dispatchEvents is the only goroutine that writes to events. Keeping this
@@ -280,10 +280,10 @@ func (d *Display) emit(event ui.Event) {
 func (d *Display) dispatchEvents() {
 	defer close(d.events)
 	for {
-		event, ok := d.eventQueue.pop()
+		event, ok := d.eventQueue.Pop()
 		if !ok {
 			select {
-			case <-d.eventQueue.wake:
+			case <-d.eventQueue.Wake:
 				continue
 			case <-d.eventStop:
 				return

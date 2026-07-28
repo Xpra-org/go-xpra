@@ -19,6 +19,59 @@ func KeysymName(c rune) string {
 	return ""
 }
 
+// modifierNames are the eight X11 modifier names in mask-bit order, which is
+// the vocabulary xpra speaks: the server maps mod1..mod5 onto whatever its own
+// keymap has bound there.
+var modifierNames = [8]string{
+	"shift", "lock", "control", "mod1", "mod2", "mod3", "mod4", "mod5",
+}
+
+// ModifierNames converts an X11 modifier mask into the names xpra uses.
+//
+// Both Linux backends need it, and both get the same mask: X11 in the state
+// field of a key event, and Wayland in wl_keyboard.modifiers, whose bits are
+// the indices of the compiled XKB keymap's real modifiers — which are these,
+// in this order.
+func ModifierNames(mask uint32) []string {
+	mods := []string{}
+	for bit, name := range modifierNames {
+		if mask&(1<<uint(bit)) != 0 {
+			mods = append(mods, name)
+		}
+	}
+	return mods
+}
+
+// KeysymFor is the inverse of KeysymName: it returns the printable ASCII
+// character an X11 keysym name stands for, and 0 for a name outside that range.
+//
+// Wayland is the caller that needs this. Its compositor hands over a keymap
+// that already names keys the way the server wants, so the backend starts from
+// the name and works backwards to fill in the numeric keysym and the text —
+// which for this range are the character code and the character itself.
+func KeysymFor(name string) rune {
+	if c, ok := punctuationCharacters[name]; ok {
+		return c
+	}
+	if runes := []rune(name); len(runes) == 1 {
+		c := runes[0]
+		if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+			return c
+		}
+	}
+	return 0
+}
+
+// punctuationCharacters inverts punctuationKeysyms, built once at startup so
+// that neither table can drift from the other.
+var punctuationCharacters = func() map[string]rune {
+	characters := make(map[string]rune, len(punctuationKeysyms))
+	for c, name := range punctuationKeysyms {
+		characters[name] = c
+	}
+	return characters
+}()
+
 // punctuationKeysyms names the printable ASCII keysyms that are not letters or
 // digits. The keys are the character codes, which for this range are also the
 // keysym values.

@@ -3,7 +3,6 @@
 package win32
 
 import (
-	"fmt"
 	"syscall"
 	"unsafe"
 
@@ -14,7 +13,7 @@ import (
 // CreateIconIndirect copies both bitmaps, so they can be deleted immediately
 // after it returns.
 func createNativeCursor(cursor *ui.Cursor) (syscall.Handle, error) {
-	if err := validateCursor(cursor); err != nil {
+	if err := cursor.Validate(); err != nil {
 		return 0, err
 	}
 	info := bitmapV5Header{
@@ -50,21 +49,4 @@ func createNativeCursor(cursor *ui.Cursor) (syscall.Handle, error) {
 		Color:    colorBitmap,
 	})
 	return native, err
-}
-
-func validateCursor(cursor *ui.Cursor) error {
-	if cursor.Width <= 0 || cursor.Height <= 0 ||
-		cursor.Width > int(^uint16(0)) || cursor.Height > int(^uint16(0)) {
-		return fmt.Errorf("invalid cursor size %dx%d", cursor.Width, cursor.Height)
-	}
-	if len(cursor.Pixels) != cursor.Width*cursor.Height*ui.BytesPerPixel {
-		return fmt.Errorf("cursor has %d pixel bytes, want %d",
-			len(cursor.Pixels), cursor.Width*cursor.Height*ui.BytesPerPixel)
-	}
-	if cursor.HotspotX < 0 || cursor.HotspotX >= cursor.Width ||
-		cursor.HotspotY < 0 || cursor.HotspotY >= cursor.Height {
-		return fmt.Errorf("cursor hotspot %d,%d lies outside %dx%d",
-			cursor.HotspotX, cursor.HotspotY, cursor.Width, cursor.Height)
-	}
-	return nil
 }

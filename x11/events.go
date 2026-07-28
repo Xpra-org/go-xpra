@@ -6,6 +6,7 @@ import (
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
 
+	"github.com/Xpra-org/go-xpra/keysym"
 	"github.com/Xpra-org/go-xpra/ui"
 )
 
@@ -71,14 +72,14 @@ func (d *Display) button(xid xproto.Window, button xproto.Button, pressed bool, 
 // The keycode is passed along as-is: the server is an X server too, so its
 // keymap may well agree with ours.
 func (d *Display) key(xid xproto.Window, keycode xproto.Keycode, state uint16, pressed bool) ui.Event {
-	keysym := effectiveKeysym(d.X, keycode, state)
+	sym := effectiveKeysym(d.X, keycode, state)
 	return ui.Key{
 		Window:    ui.WindowID(xid),
 		Pressed:   pressed,
-		Name:      keysymName(keysym),
-		Keysym:    int(keysym),
-		Text:      keyText(keysym),
+		Name:      keysym.Name(uint32(sym)),
+		Keysym:    int(sym),
+		Text:      keyText(sym),
 		Keycode:   int(keycode),
-		Modifiers: modifierNames(state),
+		Modifiers: ui.ModifierNames(uint32(state)),
 	}
 }

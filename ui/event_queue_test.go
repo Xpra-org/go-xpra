@@ -1,26 +1,24 @@
-package win32
+package ui
 
 import (
 	"reflect"
 	"testing"
-
-	"github.com/Xpra-org/go-xpra/ui"
 )
 
 func TestEventQueuePreservesReleasesAtCapacity(t *testing.T) {
 	tests := []struct {
 		name    string
-		release ui.Event
+		release Event
 	}{
-		{"key", ui.Key{Window: 1, Name: "a", Pressed: false}},
-		{"button", ui.Button{Window: 1, Button: 1, Pressed: false}},
+		{"key", Key{Window: 1, Name: "a", Pressed: false}},
+		{"button", Button{Window: 1, Button: 1, Pressed: false}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			q := newEventQueue(2)
-			q.push(ui.Motion{Window: 1, X: 10, Y: 20})
-			q.push(ui.Configure{Window: 1, Width: 800, Height: 600})
-			q.push(test.release)
+			q := NewEventQueue(2)
+			q.Push(Motion{Window: 1, X: 10, Y: 20})
+			q.Push(Configure{Window: 1, Width: 800, Height: 600})
+			q.Push(test.release)
 
 			events := drainEventQueue(q)
 			if len(events) != 2 {
@@ -34,11 +32,11 @@ func TestEventQueuePreservesReleasesAtCapacity(t *testing.T) {
 }
 
 func TestEventQueueGrowsRatherThanDroppingInputTransitions(t *testing.T) {
-	q := newEventQueue(1)
-	press := ui.Key{Window: 1, Name: "a", Pressed: true}
-	release := ui.Key{Window: 1, Name: "a", Pressed: false}
-	q.push(press)
-	q.push(release)
+	q := NewEventQueue(1)
+	press := Key{Window: 1, Name: "a", Pressed: true}
+	release := Key{Window: 1, Name: "a", Pressed: false}
+	q.Push(press)
+	q.Push(release)
 
 	events := drainEventQueue(q)
 	if len(events) != 2 {
@@ -50,25 +48,25 @@ func TestEventQueueGrowsRatherThanDroppingInputTransitions(t *testing.T) {
 }
 
 func TestEventQueueCoalescesMotionAtCapacity(t *testing.T) {
-	q := newEventQueue(2)
-	q.push(ui.Key{Window: 1, Name: "a", Pressed: true})
-	q.push(ui.Motion{Window: 1, X: 10, Y: 20})
-	q.push(ui.Motion{Window: 1, X: 30, Y: 40})
+	q := NewEventQueue(2)
+	q.Push(Key{Window: 1, Name: "a", Pressed: true})
+	q.Push(Motion{Window: 1, X: 10, Y: 20})
+	q.Push(Motion{Window: 1, X: 30, Y: 40})
 
 	events := drainEventQueue(q)
 	if len(events) != 2 {
 		t.Fatalf("queue holds %d events, want 2", len(events))
 	}
-	want := ui.Motion{Window: 1, X: 30, Y: 40}
+	want := Motion{Window: 1, X: 30, Y: 40}
 	if events[1] != want {
 		t.Errorf("motion is %#v, want %#v", events[1], want)
 	}
 }
 
-func drainEventQueue(q *eventQueue) []ui.Event {
-	var events []ui.Event
+func drainEventQueue(q *EventQueue) []Event {
+	var events []Event
 	for {
-		event, ok := q.pop()
+		event, ok := q.Pop()
 		if !ok {
 			return events
 		}
