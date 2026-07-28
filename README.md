@@ -16,6 +16,13 @@ xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
 The same source builds a `go-xpra.exe` that takes the same arguments and needs no X server on the
 Windows side: each forwarded window becomes a real Windows window.
 
+Building it under MSYS2 needs the toolchain's own `go.exe` first on `PATH`. The copy in
+`$MINGW_PREFIX/bin` is trimmed, so it looks for its `GOROOT` beside itself and does not find one:
+
+```shell
+export PATH=$MINGW_PREFIX/lib/go/bin:$PATH
+```
+
 Connection URLs use Xpra's standard `tcp://[username[:password]@]host[:port]/` form. The port
 defaults to 14500. Other protocols are rejected because this client currently supports TCP only.
 Credentials can be included in the URL; omitted values fall back to `USER` and `XPRA_PASSWORD`.
