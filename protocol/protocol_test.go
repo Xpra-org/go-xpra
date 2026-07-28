@@ -1,8 +1,14 @@
 package protocol
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/pem"
+	"math/big"
 	"net"
 	"testing"
 	"time"
@@ -240,6 +246,144 @@ func TestSendWritesOneFrame(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for the write")
+	}
+}
+
+func testTLSConfigs(t *testing.T) (*tls.Config, *tls.Config) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating TLS key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("creating TLS certificate: %v", err)
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		t.Fatalf("loading TLS certificate: %v", err)
+	}
+	parsed, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parsing TLS certificate: %v", err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(parsed)
+	return &tls.Config{
+			MinVersion:   tls.VersionTLS12,
+			Certificates: []tls.Certificate{cert},
+		}, &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: "localhost",
+			RootCAs:    roots,
+		}
+}
+
+func tlsListener(t *testing.T, config *tls.Config) net.Listener {
+	t.Helper()
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", config)
+	if err != nil {
+		t.Fatalf("listening with TLS: %v", err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	return listener
+}
+
+func TestDialTLS(t *testing.T) {
+	serverConfig, clientConfig := testTLSConfigs(t)
+	listener := tlsListener(t, serverConfig)
+	data := frame(t, []any{"ping", 4321}, false)
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer conn.Close()
+		_, err = conn.Write(data)
+		serverErr <- err
+	}()
+
+	c, err := DialTLS(listener.Addr().String(), clientConfig)
+	if err != nil {
+		t.Fatalf("DialTLS: %v", err)
+	}
+	defer c.Close()
+	packet, ok := recvPacket(t, c)
+	if !ok {
+		t.Fatalf("connection closed: %v", c.Err())
+	}
+	if packet.Type() != "ping" || packet.Int(1) != 4321 {
+		t.Errorf("got %v, want [ping 4321]", packet)
+	}
+	if err := <-serverErr; err != nil {
+		t.Errorf("TLS server: %v", err)
+	}
+}
+
+func TestDialTLSRejectsInvalidPeer(t *testing.T) {
+	tests := []struct {
+		name   string
+		config func(*tls.Config) *tls.Config
+	}{
+		{
+			name: "untrusted certificate",
+			config: func(config *tls.Config) *tls.Config {
+				config.RootCAs = x509.NewCertPool()
+				return config
+			},
+		},
+		{
+			name: "hostname mismatch",
+			config: func(config *tls.Config) *tls.Config {
+				config.ServerName = "wrong.example.com"
+				return config
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serverConfig, clientConfig := testTLSConfigs(t)
+			listener := tlsListener(t, serverConfig)
+			go func() {
+				conn, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+				if tlsConn, ok := conn.(*tls.Conn); ok {
+					_ = tlsConn.Handshake()
+				}
+			}()
+			if conn, err := DialTLS(listener.Addr().String(), tt.config(clientConfig)); err == nil {
+				conn.Close()
+				t.Fatal("DialTLS succeeded, want verification error")
+			}
+		})
+	}
+}
+
+func TestDialTLSRequiresConfig(t *testing.T) {
+	if conn, err := DialTLS("127.0.0.1:1", nil); err == nil {
+		conn.Close()
+		t.Fatal("DialTLS succeeded without a configuration")
 	}
 }
 

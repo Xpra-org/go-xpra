@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -40,6 +41,23 @@ func Dial(address string) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newConn(netConn), nil
+}
+
+// DialTLS connects to an xpra server over TLS and starts the read/write loops.
+// The caller owns the TLS policy, including roots and hostname verification.
+func DialTLS(address string, config *tls.Config) (*Conn, error) {
+	if config == nil {
+		return nil, fmt.Errorf("TLS configuration is required")
+	}
+	netConn, err := tls.Dial("tcp", address, config)
+	if err != nil {
+		return nil, err
+	}
+	return newConn(netConn), nil
+}
+
+func newConn(netConn net.Conn) *Conn {
 	c := &Conn{
 		conn:    netConn,
 		packets: make(chan Packet, 64),
@@ -47,7 +65,7 @@ func Dial(address string) (*Conn, error) {
 	}
 	go c.readLoop()
 	go c.writeLoop()
-	return c, nil
+	return c
 }
 
 // Packets returns the channel of incoming packets. It is closed when the

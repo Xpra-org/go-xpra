@@ -1,7 +1,7 @@
 # go-xpra
 
-A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP and shows the
-forwarded windows on the local desktop — X11 or Wayland on Linux, Win32 on Windows.
+A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP or TLS and
+shows the forwarded windows on the local desktop — X11 or Wayland on Linux, Win32 on Windows.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -23,20 +23,28 @@ Building it under MSYS2 needs the toolchain's own `go.exe` first on `PATH`. The 
 export PATH=$MINGW_PREFIX/lib/go/bin:$PATH
 ```
 
-Connection URLs use Xpra's standard `tcp://[username[:password]@]host[:port]/` form. The port
-defaults to 14500. Other protocols are rejected because this client currently supports TCP only.
-Credentials can be included in the URL; omitted values fall back to `USER` and `XPRA_PASSWORD`.
-Pass `-v` to log every window event and unhandled packet type.
+Connection URLs use Xpra's standard `(tcp|ssl)://[username[:password]@]host[:port]/` form. The
+port defaults to 14500. `ssl://` verifies the server certificate and hostname against the system
+trust store. Add a private CA without replacing the system roots:
 
-On Linux, `-backend` picks between the two backends and defaults to `auto`, which uses X11 when
+```shell
+./go-xpra --ssl-ca-cert /path/to/ca.pem ssl://server.example.com/
+```
+
+`--ssl-insecure` disables certificate and hostname verification for local testing and logs a
+warning; it cannot be combined with `--ssl-ca-cert`. SSL options are rejected with `tcp://` URLs.
+Credentials can be included in either URL; omitted values fall back to `USER` and
+`XPRA_PASSWORD`. Pass `-v` to log every window event and unhandled packet type.
+
+On Linux, `--backend` picks between the two backends and defaults to `auto`, which uses X11 when
 `$DISPLAY` is set and Wayland otherwise. X11 wins on purpose: a session running XWayland is still
 an X session as far as this client is concerned, and it is the better path through one, because
 xpra deals in absolute window positions that an X server honours and a Wayland compositor cannot.
-Pass `-backend wayland` to use the compositor directly anyway.
+Pass `--backend wayland` to use the compositor directly anyway.
 
 ## What it does
 
-- plain TCP transport, `rencodeplus` packet encoding, inbound `lz4` decompression
+- plain TCP and TLS transports, `rencodeplus` packet encoding, inbound `lz4` decompression
 - password authentication (the `hmac+sha256` challenge)
 - window create, destroy, move/resize, raise, minimize/restore, title changes, and
   override-redirect popups
@@ -55,7 +63,7 @@ Pass `-backend wayland` to use the compositor directly anyway.
 
 Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
 audio, window icons, native notification popups, system tray, keymap upload, and the
-`ssl`/`ws`/`wss`/`ssh` transports. Linux and Windows only — no macOS.
+`ws`/`wss`/`ssh` transports. Linux and Windows only — no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
 nothing to leave out.
@@ -147,10 +155,11 @@ resizes a window.
 
 `go test ./...` covers the parts that do not need a server or a display: the `rencodeplus` codec
 against byte-exact vectors captured from xpra's own implementation, packet framing including lz4
-and malformed input, the authentication digest against a vector from `xpra.net.digest`, the pixel
-converters, the event queue, keysym naming, and the parser for the XKB keymap a Wayland compositor
-hands over. Each backend's share of that is compiled only for its own platform, so the keyboard is
-covered on the machine the tests run on and CI runs them on both.
+and malformed input, TLS trust and hostname verification against a local certificate, the
+authentication digest against a vector from `xpra.net.digest`, the pixel converters, the event
+queue, keysym naming, and the parser for the XKB keymap a Wayland compositor hands over. Each
+backend's share of that is compiled only for its own platform, so the keyboard is covered on the
+machine the tests run on and CI runs them on both.
 
 The rest needs a real server. A useful check beyond "it looks right" is to compare the client's
 rendering against the server's own display pixel for pixel:
@@ -179,7 +188,7 @@ DISPLAY=:99 xdotool type 'echo {braces} 100%'
 WAYLAND_DISPLAY=wayland-0 grim shot.png
 ```
 
-Unsetting `DISPLAY` is what makes `-backend auto` choose Wayland. Worth exercising by hand there:
+Unsetting `DISPLAY` is what makes `--backend auto` choose Wayland. Worth exercising by hand there:
 typing punctuation, a right-click menu landing next to the pointer rather than at a corner,
 resizing the window and watching the remote application reflow, and the compositor's close button
 reaching the remote application rather than only the local window.

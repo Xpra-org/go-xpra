@@ -1,5 +1,5 @@
 // Package protocol implements xpra's packet framing: the 8-byte header, the
-// read/write loops over a TCP connection, and typed access to decoded packets.
+// read/write loops over a stream connection, and typed access to decoded packets.
 package protocol
 
 import (
