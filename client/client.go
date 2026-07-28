@@ -146,6 +146,8 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleChallenge(packet)
 	case "startup-complete":
 		log.Printf("session ready")
+	case "server-event":
+		c.handleServerEvent(packet)
 
 	case "window-create":
 		c.handleNewWindow(packet, false)
@@ -174,6 +176,25 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		// Unhandled packets are harmless: the server only sends a packet
 		// family if the hello asked for it, so anything here is informational.
 		c.debugf("ignoring %s packet", name)
+	}
+}
+
+// handleServerEvent logs an informational server lifecycle event. Dedicated
+// packets such as startup-complete and disconnect remain authoritative, so
+// these events never change client state.
+func (c *Client) handleServerEvent(packet protocol.Packet) {
+	if len(packet) < 2 {
+		log.Printf("ignoring malformed server-event packet with no event type")
+		return
+	}
+	eventType := packet.Str(1)
+	if eventType == "" {
+		log.Printf("ignoring malformed server-event packet with an invalid event type")
+		return
+	}
+	log.Printf("server event: %s", eventType)
+	if len(packet) > 2 {
+		c.debugf("server event %q arguments: %v", eventType, packet[2:])
 	}
 }
 

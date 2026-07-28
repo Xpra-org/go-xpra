@@ -35,6 +35,7 @@ Pass `-v` to log every window event and unhandled packet type.
 - window create, destroy, move/resize, title changes, and override-redirect popups
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
 - pointer, keyboard and focus forwarding, with keys named the X11 way on both platforms
+- server lifecycle event logging
 - local window resize is reported back to the server, and the title bar's close button closes the
   remote application
 

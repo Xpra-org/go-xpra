@@ -66,6 +66,11 @@ func buildHello(username string) rencodeplus.Dict {
 		{Key: "mouse", Value: true},
 		{Key: "ping", Value: true},
 
+		// Receive informational server lifecycle events such as handshake,
+		// startup, suspend, resume and exit. The dedicated protocol packets
+		// remain authoritative; these are logged for diagnostics only.
+		{Key: "events", Value: true},
+
 		// Encodings. "core" is the hard filter the server intersects with its
 		// own encoders (xpra/server/window/compress.py), so every entry names a
 		// real wire encoding. png/P and png/L are ordinary palette and

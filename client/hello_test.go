@@ -108,6 +108,9 @@ func TestBuildHello(t *testing.T) {
 	if got.Bool("chunks") {
 		t.Error("chunks must be false, or the server may split pixel data out of band")
 	}
+	if !got.Bool("events") {
+		t.Error("events must be enabled to receive server lifecycle events")
+	}
 	encoding := got.Dict("encoding")
 	if encoding == nil {
 		t.Fatal("the encoding capabilities are missing")
