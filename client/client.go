@@ -339,38 +339,50 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 		ack(decodeNotFound, "window not found")
 		return
 	}
-	switch coding {
-	case "rgb", "rgb24", "rgb32":
-	default:
-		// We advertise only the raw rgb encodings, so this should never
-		// happen; report it rather than painting nonsense.
-		log.Printf("window %d: server sent unsupported encoding %q", wid, coding)
-		ack(decodeError, "unsupported encoding "+coding)
-		return
-	}
-	// Pixel-level compression is opt-in and we never advertise the "lz4" or
-	// "zstd" capability that enables it (xpra/server/source/encoding.py:346),
-	// so its presence means the pixels are not what we expect.
-	for _, algo := range []string{"lz4", "zstd"} {
-		if options.Has(algo) {
-			log.Printf("window %d: pixels are %s-compressed, which we did not advertise", wid, algo)
-			ack(decodeError, "unexpected "+algo+" compressed pixels")
-			return
-		}
-	}
 	pixels, ok := packet.Bytes(7)
 	if !ok {
 		ack(decodeError, "no pixel data")
 		return
 	}
-	// The server always names the layout it used; the fallbacks match what
-	// xpra's own client assumes (xpra/client/gui/window/backing.py:990).
-	format := options.Str("rgb_format")
-	if format == "" {
-		format = map[string]string{"rgb24": "RGB", "rgb32": "RGBX"}[coding]
-	}
 
 	start := time.Now()
+	format := ""
+	switch coding {
+	case "rgb", "rgb24", "rgb32":
+		// Pixel-level compression is opt-in and we never advertise the "lz4"
+		// or "zstd" capability that enables it
+		// (xpra/server/source/encoding.py), so its presence means the pixels
+		// are not what we expect.
+		for _, algo := range []string{"lz4", "zstd"} {
+			if options.Has(algo) {
+				log.Printf("window %d: pixels are %s-compressed, which we did not advertise", wid, algo)
+				ack(decodeError, "unexpected "+algo+" compressed pixels")
+				return
+			}
+		}
+		// The server always names the layout it used; the fallbacks match what
+		// xpra's own client assumes (xpra/client/gui/window/backing.py).
+		format = options.Str("rgb_format")
+		if format == "" {
+			format = map[string]string{"rgb24": "RGB", "rgb32": "RGBX"}[coding]
+		}
+
+	case "jpeg", "png", "png/P", "png/L":
+		var err error
+		pixels, rowstride, err = decodeImage(coding, pixels, width, height)
+		if err != nil {
+			log.Printf("window %d: %v", wid, err)
+			ack(decodeError, err.Error())
+			return
+		}
+		format = "BGRX"
+
+	default:
+		log.Printf("window %d: server sent unsupported encoding %q", wid, coding)
+		ack(decodeError, "unsupported encoding "+coding)
+		return
+	}
+
 	if err := window.Paint(x, y, width, height, pixels, rowstride, format); err != nil {
 		log.Printf("window %d: %v", wid, err)
 		ack(decodeError, err.Error())

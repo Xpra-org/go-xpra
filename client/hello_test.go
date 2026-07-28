@@ -112,14 +112,26 @@ func TestBuildHello(t *testing.T) {
 	if encoding == nil {
 		t.Fatal("the encoding capabilities are missing")
 	}
-	// "core" is intersected with the server's own encoders, so it has to name
-	// real ones; "setting" is validated against the user-facing names instead.
-	if encoding.Str("setting") != "rgb" {
-		t.Errorf("encoding.setting = %q, want rgb", encoding.Str("setting"))
+	// Auto lets the server choose among every codec advertised in core.
+	if encoding.Str("setting") != "auto" {
+		t.Errorf("encoding.setting = %q, want auto", encoding.Str("setting"))
 	}
 	for _, key := range []string{"core", "rgb_formats"} {
 		if !encoding.Has(key) {
 			t.Errorf("encoding.%s is missing", key)
+		}
+	}
+	core, _ := encoding["core"].([]any)
+	for _, want := range []string{"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L"} {
+		found := false
+		for _, got := range core {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("encoding.core does not contain %q: %v", want, core)
 		}
 	}
 	// Advertising these would make the server compress pixel data, which this

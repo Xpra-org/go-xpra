@@ -67,19 +67,23 @@ func buildHello(username string) rencodeplus.Dict {
 		{Key: "ping", Value: true},
 
 		// Encodings. "core" is the hard filter the server intersects with its
-		// own encoders (xpra/server/window/compress.py:937), so it has to name
-		// real encoders — "rgb" is an alias accepted only for "setting".
-		{Key: "encodings", Value: []string{"rgb24", "rgb32"}},
+		// own encoders (xpra/server/window/compress.py), so every entry names a
+		// real wire encoding. png/P and png/L are ordinary palette and
+		// grayscale PNG payloads.
+		{Key: "encodings", Value: []string{
+			"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L",
+		}},
 		{Key: "encoding", Value: rencodeplus.Dict{
-			{Key: "options", Value: []string{"rgb24", "rgb32"}},
-			{Key: "core", Value: []string{"rgb24", "rgb32"}},
+			{Key: "options", Value: []string{
+				"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L",
+			}},
+			{Key: "core", Value: []string{
+				"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L",
+			}},
 
-			// "setting" pins the encoding, and unlike "core" it takes the
-			// user-facing name: set_encoding validates it against the server's
-			// advertised encodings (xpra/server/source/encoding.py:470), where
-			// the raw formats appear collectively as "rgb". Passing "rgb32"
-			// here makes the server log an error and fall back to "auto".
-			{Key: "setting", Value: "rgb"},
+			// Let the server choose raw RGB for small updates, JPEG when lossy
+			// compression is worthwhile, and PNG for lossless refreshes.
+			{Key: "setting", Value: "auto"},
 
 			// The pixel layouts we can paint. This defaults to just ("RGB",)
 			// server-side (xpra/server/source/encoding.py:69); asking for BGRX
