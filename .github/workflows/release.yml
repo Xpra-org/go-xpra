@@ -12,6 +12,9 @@ jobs:
   build:
     name: Build Linux ${{ matrix.goarch }}
     runs-on: ubuntu-latest
+    env:
+      UPX_VERSION: "5.2.0"
+      UPX_SHA256: "3db5d3294707439db97866feab8d75d800f028f48481a40547411824da4288a1"
     strategy:
       matrix:
         goarch:
@@ -28,6 +31,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install UPX
+        run: |
+          archive="${RUNNER_TEMP}/upx.tar.xz"
+          curl --fail --location --silent --show-error \
+            --output "${archive}" \
+            "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz"
+          echo "${UPX_SHA256}  ${archive}" | sha256sum --check -
+          tar --extract --xz --file "${archive}" --directory "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/upx-${UPX_VERSION}-amd64_linux" >> "${GITHUB_PATH}"
+
       - name: Build
         env:
           CGO_ENABLED: "0"
@@ -36,6 +49,8 @@ jobs:
         run: |
           mkdir -p build dist
           go build -trimpath -ldflags="-s -w" -o build/go-xpra ./cmd/go-xpra
+          upx --best --lzma build/go-xpra
+          upx --test build/go-xpra
           tar -C build -czf "dist/go-xpra-linux-${GOARCH}.tar.gz" go-xpra
 
       - name: Upload build
