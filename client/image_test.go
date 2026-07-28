@@ -129,6 +129,28 @@ func TestDecodeWebP(t *testing.T) {
 	}
 }
 
+func TestDecodeWebPVideoRangeBlack(t *testing.T) {
+	// A 2x2 lossy WebP containing solid black. VP8 stores video-range YCbCr,
+	// where black has luma 16 rather than zero.
+	encoded, err := hex.DecodeString(
+		"52494646240000005745425056503820180000003001009d012a02000200" +
+			"02403825a400037000fefb9cc000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, stride, err := decodeImage("webp", encoded, 2, 2)
+	if err != nil {
+		t.Fatalf("decodeImage: %v", err)
+	}
+	want := []byte{
+		0, 0, 0, 0xff, 0, 0, 0, 0xff,
+		0, 0, 0, 0xff, 0, 0, 0, 0xff,
+	}
+	if stride != 2*4 || !bytes.Equal(got, want) {
+		t.Errorf("got stride %d and pixels %v, want 8 and %v", stride, got, want)
+	}
+}
+
 func TestDecodeImageRejectsBadInput(t *testing.T) {
 	var valid bytes.Buffer
 	if err := png.Encode(&valid, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {

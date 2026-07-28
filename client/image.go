@@ -79,18 +79,68 @@ func decodeImage(coding string, data []byte, width, height int) ([]byte, int, er
 
 	stride := width * ui.BytesPerPixel
 	pixels := make([]byte, stride*height)
+	var webpYCbCr *image.YCbCr
+	var webpAlpha *image.NYCbCrA
+	if coding == "webp" {
+		switch img := img.(type) {
+		case *image.YCbCr:
+			webpYCbCr = img
+		case *image.NYCbCrA:
+			webpYCbCr = &img.YCbCr
+			webpAlpha = img
+		}
+	}
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
+			i := y*stride + x*ui.BytesPerPixel
+			if webpYCbCr != nil {
+				px, py := bounds.Min.X+x, bounds.Min.Y+y
+				yi, ci := webpYCbCr.YOffset(px, py), webpYCbCr.COffset(px, py)
+				r, g, b := webpYCbCrToRGB(
+					webpYCbCr.Y[yi], webpYCbCr.Cb[ci], webpYCbCr.Cr[ci])
+				if webpAlpha != nil {
+					a := uint16(webpAlpha.A[webpAlpha.AOffset(px, py)])
+					r, g, b = byte(uint16(r)*a/0xff),
+						byte(uint16(g)*a/0xff), byte(uint16(b)*a/0xff)
+				}
+				pixels[i], pixels[i+1], pixels[i+2], pixels[i+3] = b, g, r, 0xff
+				continue
+			}
 			// RGBA returns alpha-premultiplied channels. Since the hello says
 			// this client has no transparent backing store, that naturally
 			// composites an unexpected translucent image over black.
 			r, g, b, _ := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
-			i := y*stride + x*ui.BytesPerPixel
 			pixels[i], pixels[i+1], pixels[i+2], pixels[i+3] =
 				byte(b>>8), byte(g>>8), byte(r>>8), 0xff
 		}
 	}
 	return pixels, stride, nil
+}
+
+// webpYCbCrToRGB converts WebP's video-range BT.601 samples. Go's
+// image.YCbCr conversion implements full-range JPEG YCbCr instead, which maps
+// WebP's black luma value of 16 to RGB 16 rather than RGB 0.
+//
+// These fixed-point constants and operations match libwebp's scalar decoder.
+func webpYCbCrToRGB(y, cb, cr byte) (byte, byte, byte) {
+	multHi := func(value, coefficient int) int {
+		return value * coefficient >> 8
+	}
+	clip := func(value int) byte {
+		if value < 0 {
+			return 0
+		}
+		value >>= 6
+		if value > 0xff {
+			return 0xff
+		}
+		return byte(value)
+	}
+	yi, cbi, cri := int(y), int(cb), int(cr)
+	r := clip(multHi(yi, 19077) + multHi(cri, 26149) - 14234)
+	g := clip(multHi(yi, 19077) - multHi(cbi, 6419) - multHi(cri, 13320) + 8708)
+	b := clip(multHi(yi, 19077) + multHi(cbi, 33050) - 17685)
+	return r, g, b
 }
 
 // decodeCursorPNG preserves the PNG alpha channel, unlike ordinary window
