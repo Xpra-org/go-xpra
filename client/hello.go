@@ -64,6 +64,7 @@ func buildHello(username string) rencodeplus.Dict {
 		{Key: "windows", Value: true},
 		{Key: "keyboard", Value: true},
 		{Key: "mouse", Value: true},
+		{Key: "bell", Value: true},
 		{Key: "ping", Value: true},
 
 		// Receive informational server lifecycle events such as handshake,

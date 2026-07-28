@@ -91,6 +91,21 @@ func Open() (*Display, error) {
 // loop ends.
 func (d *Display) Events() <-chan ui.Event { return d.events }
 
+// Bell plays a real tone without blocking the client or window thread. Win32
+// supports the requested pitch and duration but has no equivalent for X11's
+// relative volume or named bell.
+func (d *Display) Bell(_percent, pitch, duration int64, _name string) {
+	if pitch < 37 || pitch > 32767 {
+		pitch = 800
+	}
+	if duration <= 0 {
+		duration = 100
+	} else if duration > 5000 {
+		duration = 5000
+	}
+	go beep(uint32(pitch), uint32(duration))
+}
+
 // Close ends the message loop, which destroys every window with it.
 func (d *Display) Close() {
 	d.once.Do(func() {

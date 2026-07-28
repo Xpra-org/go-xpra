@@ -111,6 +111,9 @@ func TestBuildHello(t *testing.T) {
 	if !got.Bool("events") {
 		t.Error("events must be enabled to receive server lifecycle events")
 	}
+	if !got.Bool("bell") {
+		t.Error("bell must be enabled to receive forwarded bell events")
+	}
 	encoding := got.Dict("encoding")
 	if encoding == nil {
 		t.Fatal("the encoding capabilities are missing")

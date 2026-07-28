@@ -161,6 +161,8 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleMetadata(packet)
 	case "window-raise":
 		c.handleRaiseWindow(packet)
+	case "window-bell":
+		c.handleBell(packet)
 	case "window-draw":
 		c.handleDraw(packet)
 
@@ -346,6 +348,14 @@ func (c *Client) handleRaiseWindow(packet protocol.Packet) {
 		return
 	}
 	window.Raise()
+}
+
+// handleBell forwards the useful parts of
+// [wid, device, percent, pitch, duration, class, id, name] to the local
+// desktop. The bell is still meaningful when wid is zero or the window has
+// already disappeared, so it deliberately does not require a window lookup.
+func (c *Client) handleBell(packet protocol.Packet) {
+	c.display.Bell(packet.Int(3), packet.Int(4), packet.Int(5), packet.Str(8))
 }
 
 // handleDraw paints one damage rectangle.

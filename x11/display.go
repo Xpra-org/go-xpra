@@ -92,6 +92,14 @@ func (d *Display) createGC() error {
 // connection to the X server ends.
 func (d *Display) Events() <-chan ui.Event { return d.events }
 
+// Bell rings the X server's keyboard bell. The core request can vary the
+// configured volume, but pitch and duration remain properties of the local X
+// server rather than parameters of an individual bell request.
+func (d *Display) Bell(percent, _pitch, _duration int64, _name string) {
+	volume := int8(min(max(percent, -100), 100))
+	xproto.Bell(d.X.Conn(), volume)
+}
+
 // Depth returns the root window's depth, which is what all our windows use.
 func (d *Display) Depth() byte { return d.X.Screen().RootDepth }
 

@@ -20,6 +20,7 @@ var (
 	gdi32    = syscall.NewLazyDLL("gdi32.dll")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
+	procBeep            = kernel32.NewProc("Beep")
 
 	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
 	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
@@ -176,6 +177,10 @@ func getModuleHandle() (syscall.Handle, error) {
 		return 0, fmt.Errorf("GetModuleHandle: %w", err)
 	}
 	return syscall.Handle(r), nil
+}
+
+func beep(frequency, duration uint32) {
+	procBeep.Call(uintptr(frequency), uintptr(duration))
 }
 
 func registerClassEx(class *wndClassEx) error {

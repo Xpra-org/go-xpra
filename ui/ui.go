@@ -30,6 +30,10 @@ type Display interface {
 	// connection to the desktop ends.
 	Events() <-chan Event
 
+	// Bell rings the local desktop bell for a remote application. Backends use
+	// whichever bell properties their platform can represent.
+	Bell(percent, pitch, duration int64, name string)
+
 	// Close tears down the connection and every window on it.
 	Close()
 }

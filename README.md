@@ -35,6 +35,7 @@ Pass `-v` to log every window event and unhandled packet type.
 - window create, destroy, move/resize, raise, title changes, and override-redirect popups
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
 - pointer, keyboard and focus forwarding, with keys named the X11 way on both platforms
+- forwarded application bells using the native X11 or Win32 sound
 - server lifecycle event logging
 - local window resize is reported back to the server, and the title bar's close button closes the
   remote application
@@ -42,7 +43,7 @@ Pass `-v` to log every window event and unhandled packet type.
 ## What it does not do
 
 Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
-audio, cursors, window icons, notifications, bell, system tray, keymap upload, and the
+audio, cursors, window icons, notifications, system tray, keymap upload, and the
 `ssl`/`ws`/`wss`/`ssh` transports. Linux and Windows only — no Wayland and no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
