@@ -131,9 +131,10 @@ func (w *Window) createToplevel() error {
 
 // requestDecoration asks the compositor to draw the window frame, which is the
 // only way to have one: Wayland leaves decorations to the client, and this
-// client draws none. A compositor without the extension — GNOME — leaves the
-// windows bare, and the close button then lives in whatever gesture or overview
-// it offers instead.
+// client draws none. A compositor without the extension — GNOME, weston —
+// leaves the windows bare, and the close button then lives in whatever gesture
+// or overview it offers instead. Open says so once; there is nothing to report
+// per window.
 func (w *Window) requestDecoration() {
 	if w.d.decoration == nil {
 		return

@@ -77,8 +77,9 @@ where each window goes, so the positions the server sends are kept as bookkeepin
 with rather than applied; a raise from the server does nothing, because stacking is the
 compositor's alone; and a window can be minimized but not restored, there being no request for it.
 There is no bell. Windows have a title bar only under a compositor that implements
-`xdg-decoration` — KDE and the wlroots ones do, GNOME does not — and are otherwise bare, with the
-close gesture wherever the compositor keeps it. Its keyboard is the best of the three: the
+`xdg-decoration` — KDE and the wlroots ones do, GNOME and weston do not — and are otherwise bare,
+with the close gesture wherever the compositor keeps it; the client says which it found on
+startup. Its keyboard is the best of the three: the
 compositor hands over its whole keymap, so every layout names its keys correctly.
 
 ## Layout

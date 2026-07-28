@@ -61,8 +61,8 @@ type Display struct {
 	pointer    *client.Pointer
 	keyboard   *client.Keyboard
 
-	// decoration is nil on a compositor that draws no window frames — GNOME
-	// being the notable one — in which case the windows have no title bar.
+	// decoration is nil on a compositor that draws no window frames — GNOME and
+	// weston both — in which case the windows have no title bar.
 	decoration *xdg_decoration.DecorationManager
 
 	// seatBound is the version wl_seat was actually bound at, which decides
@@ -148,6 +148,13 @@ func Open() (*Display, error) {
 			d.ctx.Close()
 			return nil, fmt.Errorf("the compositor does not offer %s", required.name)
 		}
+	}
+	if d.decoration == nil {
+		// Saying this once is what makes a bare window look like the compositor
+		// rather than like a bug: without the extension every client is expected
+		// to draw its own title bar, and this one draws none.
+		log.Printf("wayland: the compositor does not offer xdg-decoration, " +
+			"so windows will have no title bar")
 	}
 	// A client that does not answer a ping is killed as unresponsive.
 	d.wmBase.SetPingHandler(func(e xdg_shell.WmBasePingEvent) {
