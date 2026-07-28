@@ -1,6 +1,6 @@
 // Command go-xpra is a minimal xpra client: it connects to a server over TCP
-// and displays the forwarded windows on the local desktop, through X11 on Linux
-// and through Win32 on Windows.
+// and displays the forwarded windows on the local desktop, through X11 or
+// Wayland on Linux and through Win32 on Windows.
 //
 // It supports raw RGB, JPEG, PNG and WebP pixels, and needs no cgo. See the
 // README for what is and is not implemented.

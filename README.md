@@ -1,7 +1,7 @@
 # go-xpra
 
 A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP and shows the
-forwarded windows on the local desktop — X11 on Linux, Win32 on Windows.
+forwarded windows on the local desktop — X11 or Wayland on Linux, Win32 on Windows.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -28,6 +28,12 @@ defaults to 14500. Other protocols are rejected because this client currently su
 Credentials can be included in the URL; omitted values fall back to `USER` and `XPRA_PASSWORD`.
 Pass `-v` to log every window event and unhandled packet type.
 
+On Linux, `-backend` picks between the two backends and defaults to `auto`, which uses X11 when
+`$DISPLAY` is set and Wayland otherwise. X11 wins on purpose: a session running XWayland is still
+an X session as far as this client is concerned, and it is the better path through one, because
+xpra deals in absolute window positions that an X server honours and a Wayland compositor cannot.
+Pass `-backend wayland` to use the compositor directly anyway.
+
 ## What it does
 
 - plain TCP transport, `rencodeplus` packet encoding, inbound `lz4` decompression
@@ -35,8 +41,10 @@ Pass `-v` to log every window event and unhandled packet type.
 - window create, destroy, move/resize, raise, minimize/restore, title changes, and
   override-redirect popups
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
-- pointer, keyboard and focus forwarding, with keys named the X11 way on both platforms
+- pointer, keyboard and focus forwarding, with keys named the X11 way on every platform
 - server-provided PNG pointer cursors, including hotspot changes and default-cursor resets
+- native Wayland windows through `xdg-shell` and `wl_shm`, with menus as real `xdg_popup`s and
+  window frames from `xdg-decoration`
 - forwarded application bells using the native X11 or Win32 sound
 - desktop notification logging
 - server lifecycle event logging
@@ -47,7 +55,7 @@ Pass `-v` to log every window event and unhandled packet type.
 
 Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
 audio, window icons, native notification popups, system tray, keymap upload, and the
-`ssl`/`ws`/`wss`/`ssh` transports. Linux and Windows only — no Wayland and no macOS.
+`ssl`/`ws`/`wss`/`ssh` transports. Linux and Windows only — no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
 nothing to leave out.
@@ -55,6 +63,15 @@ nothing to leave out.
 The Windows backend is newer and thinner than the X11 one. It names keys from the active keyboard
 layout, but only as far as printable ASCII: a key that produces anything else has no X11 keysym
 name here and is dropped rather than guessed at, so non-Latin layouts and dead keys do not type.
+
+The Wayland backend gives up what the protocol does not offer a client. The compositor decides
+where each window goes, so the positions the server sends are kept as bookkeeping and answered
+with rather than applied; a raise from the server does nothing, because stacking is the
+compositor's alone; and a window can be minimized but not restored, there being no request for it.
+There is no bell. Windows have a title bar only under a compositor that implements
+`xdg-decoration` — KDE and the wlroots ones do, GNOME does not — and are otherwise bare, with the
+close gesture wherever the compositor keeps it. Its keyboard is the best of the three: the
+compositor hands over its whole keymap, so every layout names its keys correctly.
 
 ## Layout
 
@@ -64,13 +81,17 @@ name here and is dropped rather than guessed at, so non-Latin layouts and dead k
 | `protocol` | the 8-byte packet header, the framed connection, typed packet accessors |
 | `client` | the state machine, the hello capabilities, and event-to-packet translation |
 | `ui` | all the client sees of the desktop: windows, events, pixel conversion |
+| `keysym` | X11 keysym names, shared by the two Linux backends |
 | `x11` | the X connection, forwarded windows, and RGB painting — Linux |
+| `wayland` | the compositor connection, `xdg-shell` windows, and shared-memory painting — Linux |
 | `win32` | the window thread, forwarded windows, and RGB painting — Windows |
 | `cmd/go-xpra` | the command line entry point |
 
 Four goroutines: one reads packets from the socket, one writes them, one belongs to the local
-desktop — reading X events, or owning the Windows windows and their message loop — and the main
-one owns all client state and is the only writer to either.
+desktop — reading X events, dispatching Wayland ones, or owning the Windows windows and their
+message loop — and the main one owns all client state and is the only writer to either. The two
+backends that cannot let their desktop goroutine block on a slow client put a coalescing queue in
+between, which adds a fifth.
 
 ## Notes on the design
 
@@ -83,19 +104,37 @@ inline and removes the entire reassembly path.
 **Building on the window system directly, with no toolkit.** An xpra client wants real top-level
 windows at absolute positions, unmanaged override-redirect popups, and keys named the way an X
 server names them — all of which map onto a window system's own API directly and onto a GUI
-toolkit awkwardly. So each backend talks to its system as it is: `xgb` on X11, `user32` and
-`gdi32` through `syscall` on Windows, both of them pure Go. What the client sees of either is the
-handful of methods and six events in `ui`.
+toolkit awkwardly. So each backend talks to its system as it is: `xgb` on X11, generated wire
+bindings on Wayland, `user32` and `gdi32` through `syscall` on Windows, all of them pure Go. What
+the client sees of any of them is the handful of methods and six events in `ui`.
 
-The hello asks for the `BGRX` and `BGRA` pixel layouts specifically, because they are what both
-systems already want — an X11 `ZPixmap` at depth 24 and a 32-bit `BI_RGB` DIB have the same byte
-order — so painting is a per-row copy with no channel shuffling.
+The hello asks for the `BGRX` and `BGRA` pixel layouts specifically, because they are what all
+three systems already want — an X11 `ZPixmap` at depth 24, a 32-bit `BI_RGB` DIB and a `wl_shm`
+`xrgb8888` buffer have the same byte order — so painting is a per-row copy with no channel
+shuffling.
 
-Where those pixels live is the one place the two backends genuinely differ. On X11 each window's
+Where those pixels live is the one place the backends genuinely differ. On X11 each window's
 backing store is a pixmap on the server, installed as the window background, so exposures repaint
 without the client being involved. Windows has no equivalent, so the buffer is ordinary Go memory
 that `WM_PAINT` blits from: no GDI handles to own, no thread to own them on, and a damage
-rectangle is still just a copy.
+rectangle is still just a copy. Wayland lands between the two — the buffer is an anonymous file
+mapped into both processes, so it is ordinary memory to write into and the compositor's to read,
+and a repaint is a copy plus the rectangle it touched.
+
+**The Wayland coordinates are a fiction, kept deliberately.** A client cannot place its own
+windows and cannot ask where one ended up. But xpra sends absolute positions, and wants pointer
+events and configure replies back in the same frame of reference, so what the server says is
+remembered and used to answer it while the compositor puts the windows where it likes. Pointer
+positions are reported relative to where the server thinks the window is, which keeps the remote
+application's idea of the pointer consistent with its own windows, and a menu is anchored to its
+parent at the offset the server asked for — which is right whenever the parent is where the
+server thinks it is, and close enough when it is not.
+
+**One mutex owns the Wayland connection.** The wire protocol multiplexes every object over one
+socket, and the object table behind it is not safe for concurrent use — but the socket read has to
+be able to block while the client keeps sending. So the blocking read is left outside the lock and
+only the handler that follows it runs inside, which is enough to let every `ui.Window` call issue
+its requests inline, with no work queue and no thread of its own.
 
 **One thread owns the windows on Windows.** A window belongs to the thread that created it, and
 only that thread may pump its messages, so one goroutine is pinned to a thread with
@@ -109,8 +148,9 @@ resizes a window.
 `go test ./...` covers the parts that do not need a server or a display: the `rencodeplus` codec
 against byte-exact vectors captured from xpra's own implementation, packet framing including lz4
 and malformed input, the authentication digest against a vector from `xpra.net.digest`, the pixel
-converters, and keysym naming. Each backend's half of that last one is compiled only for its own
-platform, so the keyboard is covered on the machine the tests run on and CI runs them on both.
+converters, the event queue, keysym naming, and the parser for the XKB keymap a Wayland compositor
+hands over. Each backend's share of that is compiled only for its own platform, so the keyboard is
+covered on the machine the tests run on and CI runs them on both.
 
 The rest needs a real server. A useful check beyond "it looks right" is to compare the client's
 rendering against the server's own display pixel for pixel:
@@ -124,3 +164,22 @@ DISPLAY=:100 import -window "$(DISPLAY=:100 xdotool search --class xterm | head 
 DISPLAY=:99  import -window "$(DISPLAY=:99 xdotool search --name antoine | head -1)" ours.png
 compare -metric AE ref.png ours.png null:      # expect 0
 ```
+
+The Wayland backend needs a compositor rather than an X server, and one nested inside `Xvfb` keeps
+the whole thing off the real desktop while still delivering real input — which is what makes
+`xdotool` able to drive it:
+
+```shell
+Xvfb :99 -screen 0 1280x800x24 &
+DISPLAY=:99 WLR_BACKENDS=x11 WLR_RENDERER=pixman labwc &   # any wlroots compositor will do
+env -u DISPLAY WAYLAND_DISPLAY=wayland-0 ./go-xpra tcp://127.0.0.1/ &
+
+DISPLAY=:99 xdotool mousemove 500 400 click 1
+DISPLAY=:99 xdotool type 'echo {braces} 100%'
+WAYLAND_DISPLAY=wayland-0 grim shot.png
+```
+
+Unsetting `DISPLAY` is what makes `-backend auto` choose Wayland. Worth exercising by hand there:
+typing punctuation, a right-click menu landing next to the pointer rather than at a corner,
+resizing the window and watching the remote application reflow, and the compositor's close button
+reaching the remote application rather than only the local window.

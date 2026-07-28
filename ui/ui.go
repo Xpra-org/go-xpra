@@ -1,15 +1,16 @@
 // Package ui is the boundary between the xpra client and the local desktop.
 //
 // The client state machine deals only in the types declared here, so that the
-// windowing system it is driving — X11 on Linux, Win32 on Windows — is chosen
-// at build time and is otherwise invisible to it. A backend implements Display
-// and Window, and translates its native event queue into the small set of
-// events in event.go.
+// windowing system it is driving — X11 or Wayland on Linux, Win32 on Windows —
+// is chosen at run time and is otherwise invisible to it. A backend implements
+// Display and Window, and translates its native event queue into the small set
+// of events in event.go.
 //
-// The pixel and keysym helpers live here because both backends need them: the
+// The pixel and keysym helpers live here because every backend needs them: the
 // pixel converters because BGRX happens to be the native layout of an X11
-// framebuffer and of a Win32 DIB alike, and the keysym names because they are
-// really part of the xpra protocol vocabulary rather than of any one platform.
+// framebuffer, a Win32 DIB and a wl_shm buffer alike, and the keysym names
+// because they are really part of the xpra protocol vocabulary rather than of
+// any one platform.
 package ui
 
 import "fmt"
