@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Xpra-org/go-xpra/protocol"
@@ -148,6 +149,10 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		log.Printf("session ready")
 	case "server-event":
 		c.handleServerEvent(packet)
+	case "notification-show":
+		c.handleNotificationShow(packet)
+	case "notification-close":
+		c.handleNotificationClose(packet)
 
 	case "window-create":
 		c.handleNewWindow(packet, false)
@@ -200,6 +205,35 @@ func (c *Client) handleServerEvent(packet protocol.Packet) {
 	if len(packet) > 2 {
 		c.debugf("server event %q arguments: %v", eventType, packet[2:])
 	}
+}
+
+// handleNotificationShow logs the textual part of a forwarded desktop
+// notification. Icons, actions and hints may contain large or binary values
+// and have no useful representation in a log, so they are deliberately
+// ignored.
+func (c *Client) handleNotificationShow(packet protocol.Packet) {
+	// [dbus_id, nid, app_name, replaces_nid, app_icon, summary, body, ...]
+	if len(packet) < 8 {
+		log.Printf("ignoring malformed notification-show packet")
+		return
+	}
+	appName, summary, body := packet.Str(3), packet.Str(6), packet.Str(7)
+	if appName == "" {
+		log.Printf("notification: %s", summary)
+	} else {
+		log.Printf("notification from %s: %s", appName, summary)
+	}
+	for line := range strings.Lines(body) {
+		log.Printf("  %s", strings.TrimSuffix(line, "\n"))
+	}
+}
+
+func (c *Client) handleNotificationClose(packet protocol.Packet) {
+	if len(packet) < 2 {
+		log.Printf("ignoring malformed notification-close packet")
+		return
+	}
+	c.debugf("notification %d closed", packet.Int(1))
 }
 
 func (c *Client) handleHello(packet protocol.Packet) {

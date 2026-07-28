@@ -152,6 +152,8 @@ var canonicalNames = map[string]string{
 	"initiate-moveresize":         "window-initiate-moveresize",
 	"configure-override-redirect": "window-move-resize",
 	"bell":                        "window-bell",
+	"notify_show":                 "notification-show",
+	"notify_close":                "notification-close",
 }
 
 // Canonical returns the modern name for a packet type.

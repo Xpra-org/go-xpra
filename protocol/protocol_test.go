@@ -302,6 +302,8 @@ func TestCanonicalNames(t *testing.T) {
 		"window-draw":           "window-draw",
 		"new-window":            "window-create",
 		"lost-window":           "window-destroy",
+		"notify_show":           "notification-show",
+		"notify_close":          "notification-close",
 		"window-metadata":       "window-metadata",
 		"new-override-redirect": "new-override-redirect", // must stay distinct
 	}

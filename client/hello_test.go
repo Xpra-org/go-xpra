@@ -114,6 +114,13 @@ func TestBuildHello(t *testing.T) {
 	if !got.Bool("bell") {
 		t.Error("bell must be enabled to receive forwarded bell events")
 	}
+	if !got.Bool("notification") {
+		t.Error("the modern notification capability must be enabled")
+	}
+	notifications := got.Dict("notifications")
+	if notifications == nil || !notifications.Bool("enabled") {
+		t.Error("the compatibility notifications.enabled capability must be enabled")
+	}
 	encoding := got.Dict("encoding")
 	if encoding == nil {
 		t.Fatal("the encoding capabilities are missing")

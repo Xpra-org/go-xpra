@@ -36,7 +36,7 @@ const challengeSaltLen = 32
 // The shape here is load-bearing in ways that are not obvious, so the
 // non-obvious keys carry the server-side reference that explains them. Anything
 // not advertised is simply never sent to us, which is how this client avoids
-// having to handle cursors, icons, notifications, clipboard and audio at all.
+// having to handle cursors, icons, clipboard and audio at all.
 func buildHello(username string) rencodeplus.Dict {
 	caps := rencodeplus.Dict{
 		{Key: "version", Value: clientVersion},
@@ -66,6 +66,14 @@ func buildHello(username string) rencodeplus.Dict {
 		{Key: "mouse", Value: true},
 		{Key: "bell", Value: true},
 		{Key: "ping", Value: true},
+
+		// Receive desktop notifications for logging. The singular boolean is
+		// the modern capability; backwards-compatible servers read the nested
+		// plural form and gate packets on its enabled flag.
+		{Key: "notification", Value: true},
+		{Key: "notifications", Value: rencodeplus.Dict{
+			{Key: "enabled", Value: true},
+		}},
 
 		// Receive informational server lifecycle events such as handshake,
 		// startup, suspend, resume and exit. The dedicated protocol packets
