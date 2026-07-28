@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="xpra.png" alt="go-xpra logo" width="320">
+</p>
+
 # go-xpra
 
 A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP or TLS and
