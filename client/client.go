@@ -10,12 +10,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/jezek/xgb"
-	"github.com/jezek/xgb/xproto"
-
 	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/rencodeplus"
-	"github.com/Xpra-org/go-xpra/x11"
+	"github.com/Xpra-org/go-xpra/ui"
 )
 
 // pingInterval is how often we ping the server. The server pings us
@@ -32,15 +29,15 @@ const (
 )
 
 // Client is the connection state machine. Everything on it is owned by the
-// goroutine running Run; the network and X11 reader goroutines only feed it
+// goroutine running Run; the network and desktop reader goroutines only feed it
 // through channels.
 type Client struct {
 	conn    *protocol.Conn
-	display *x11.Display
+	display ui.Display
 	verbose bool
 
-	windows map[int64]*x11.Window   // xpra window id -> window
-	byXID   map[xproto.Window]int64 // X window id -> xpra window id
+	windows map[int64]ui.Window   // xpra window id -> local window
+	byLocal map[ui.WindowID]int64 // local window id -> xpra window id
 	focused int64
 
 	serverVersion string
@@ -51,22 +48,22 @@ type Client struct {
 	quit          chan struct{}
 }
 
-// New builds a client over an established connection and X display.
-func New(conn *protocol.Conn, display *x11.Display, verbose bool, username, password string) *Client {
+// New builds a client over an established connection and local display.
+func New(conn *protocol.Conn, display ui.Display, verbose bool, username, password string) *Client {
 	return &Client{
 		conn:     conn,
 		display:  display,
 		verbose:  verbose,
 		username: username,
 		password: password,
-		windows:  map[int64]*x11.Window{},
-		byXID:    map[xproto.Window]int64{},
+		windows:  map[int64]ui.Window{},
+		byLocal:  map[ui.WindowID]int64{},
 		quit:     make(chan struct{}),
 	}
 }
 
-// Run performs the handshake and then services packets and X events until the
-// connection ends. It returns nil for a clean server-initiated disconnect.
+// Run performs the handshake and then services packets and local events until
+// the connection ends. It returns nil for a clean server-initiated disconnect.
 func (c *Client) Run() error {
 	if err := c.sendHello("", nil); err != nil {
 		return fmt.Errorf("sending hello: %w", err)
@@ -88,9 +85,9 @@ func (c *Client) Run() error {
 
 		case event, ok := <-c.display.Events():
 			if !ok {
-				return errors.New("lost the connection to the X server")
+				return errors.New("lost the connection to the local display")
 			}
-			c.handleXEvent(event)
+			c.handleUIEvent(event)
 
 		case <-ping.C:
 			c.send("ping", time.Now().UnixMilli())
@@ -221,6 +218,19 @@ func (c *Client) handlePing(packet protocol.Packet) {
 	c.send("ping_echo", packet.Int(1), 0, 0, 0, -1, sessionID)
 }
 
+// packetWindowSize reads the width and height shared by the window-create and
+// window-move-resize packets. Window dimensions are USHORT values in the
+// window-system protocols, so cap the decoded int64 values before converting
+// them to int. This is important on 32-bit clients, where a malicious packet
+// could otherwise overflow during that conversion.
+func packetWindowSize(packet protocol.Packet) (width, height int) {
+	const maxDimension = int64(^uint16(0))
+	dimension := func(index int) int {
+		return int(min(max(packet.Int(index), 1), maxDimension))
+	}
+	return dimension(4), dimension(5)
+}
+
 // handleNewWindow creates a local window for a new remote one.
 //
 // The packet is [wid, x, y, w, h, metadata, client_properties]. Override-
@@ -229,7 +239,7 @@ func (c *Client) handlePing(packet protocol.Packet) {
 func (c *Client) handleNewWindow(packet protocol.Packet, overrideRedirect bool) {
 	wid := packet.Int(1)
 	x, y := int(packet.Int(2)), int(packet.Int(3))
-	width, height := int(packet.Int(4)), int(packet.Int(5))
+	width, height := packetWindowSize(packet)
 	metadata := packet.Dict(6)
 	overrideRedirect = overrideRedirect || metadata.Bool("override-redirect")
 
@@ -246,7 +256,7 @@ func (c *Client) handleNewWindow(packet protocol.Packet, overrideRedirect bool) 
 	window.Map()
 
 	c.windows[wid] = window
-	c.byXID[window.ID()] = wid
+	c.byLocal[window.ID()] = wid
 	c.debugf("window %d created: %dx%d at %d,%d override-redirect=%v title=%q",
 		wid, width, height, x, y, overrideRedirect, metadata.Str("title"))
 
@@ -269,8 +279,8 @@ func (c *Client) handleLostWindow(packet protocol.Packet) {
 	c.debugf("window %d destroyed", wid)
 }
 
-func (c *Client) forgetWindow(wid int64, window *x11.Window) {
-	delete(c.byXID, window.ID())
+func (c *Client) forgetWindow(wid int64, window ui.Window) {
+	delete(c.byLocal, window.ID())
 	delete(c.windows, wid)
 	if c.focused == wid {
 		c.focused = 0
@@ -285,7 +295,7 @@ func (c *Client) handleMoveResize(packet protocol.Packet) {
 		return
 	}
 	x, y := int(packet.Int(2)), int(packet.Int(3))
-	width, height := int(packet.Int(4)), int(packet.Int(5))
+	width, height := packetWindowSize(packet)
 	if err := window.MoveResize(x, y, width, height); err != nil {
 		log.Printf("resizing window %d: %v", wid, err)
 	}
@@ -375,67 +385,59 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 	ack(elapsed, "")
 }
 
-// handleXEvent translates a local X event into the packets the server expects.
-func (c *Client) handleXEvent(event xgb.Event) {
+// handleUIEvent translates a local window event into the packets the server
+// expects.
+func (c *Client) handleUIEvent(event ui.Event) {
 	switch e := event.(type) {
-	case xproto.ConfigureNotifyEvent:
-		c.handleConfigureNotify(e)
-	case xproto.ClientMessageEvent:
-		c.handleClientMessage(e)
-	case xproto.MotionNotifyEvent:
+	case ui.Configure:
+		c.handleConfigure(e)
+	case ui.CloseRequest:
+		c.handleCloseRequest(e)
+	case ui.Motion:
 		c.handleMotion(e)
-	case xproto.ButtonPressEvent:
-		c.handleButton(e.Event, e.Detail, true, e.RootX, e.RootY)
-	case xproto.ButtonReleaseEvent:
-		c.handleButton(e.Event, e.Detail, false, e.RootX, e.RootY)
-	case xproto.KeyPressEvent:
-		c.handleKey(e.Event, e.Detail, e.State, true)
-	case xproto.KeyReleaseEvent:
-		c.handleKey(e.Event, e.Detail, e.State, false)
-	case xproto.FocusInEvent:
-		c.handleFocusIn(e)
+	case ui.Button:
+		c.handleButton(e)
+	case ui.Key:
+		c.handleKey(e)
+	case ui.Focus:
+		c.handleFocus(e)
 	}
 }
 
-// handleConfigureNotify reports a geometry change the local window manager
-// made, so the remote application can reflow to match.
-func (c *Client) handleConfigureNotify(e xproto.ConfigureNotifyEvent) {
+// handleConfigure reports a geometry change the local desktop made, so the
+// remote application can reflow to match.
+func (c *Client) handleConfigure(e ui.Configure) {
 	wid, window, ok := c.lookup(e.Window)
 	if !ok {
 		return
 	}
-	x, y := int(e.X), int(e.Y)
-	width, height := int(e.Width), int(e.Height)
 	oldX, oldY, oldW, oldH := window.Geometry()
-	if x == oldX && y == oldY && width == oldW && height == oldH {
+	if e.X == oldX && e.Y == oldY && e.Width == oldW && e.Height == oldH {
 		return
 	}
-	if err := window.Resized(x, y, width, height); err != nil {
+	if err := window.Resized(e.X, e.Y, e.Width, e.Height); err != nil {
 		log.Printf("window %d: %v", wid, err)
 		return
 	}
-	c.send("configure-window", wid, x, y, width, height, rencodeplus.Dict{})
+	c.send("configure-window", wid, e.X, e.Y, e.Width, e.Height, rencodeplus.Dict{})
 }
 
-// handleClientMessage handles the window manager's close request.
-func (c *Client) handleClientMessage(e xproto.ClientMessageEvent) {
+// handleCloseRequest passes the user's close request to the server, which owns
+// the decision: the window goes away when a window-destroy packet says so.
+func (c *Client) handleCloseRequest(e ui.CloseRequest) {
 	wid, _, ok := c.lookup(e.Window)
 	if !ok {
 		return
 	}
-	if e.Type != c.display.WMProtocols || e.Format != 32 {
-		return
-	}
-	if data := e.Data.Data32; len(data) > 0 && xproto.Atom(data[0]) == c.display.WMDeleteWindow {
-		c.debugf("window %d: close requested", wid)
-		c.send("close-window", wid)
-	}
+	c.debugf("window %d: close requested", wid)
+	c.send("close-window", wid)
 }
 
-// lookup resolves an X window id to the xpra window it belongs to. Events for
-// windows we have already destroyed are routine and simply reported as absent.
-func (c *Client) lookup(xid xproto.Window) (int64, *x11.Window, bool) {
-	wid, ok := c.byXID[xid]
+// lookup resolves a local window id to the xpra window it belongs to. Events
+// for windows we have already destroyed are routine and simply reported as
+// absent.
+func (c *Client) lookup(id ui.WindowID) (int64, ui.Window, bool) {
+	wid, ok := c.byLocal[id]
 	if !ok {
 		return 0, nil, false
 	}

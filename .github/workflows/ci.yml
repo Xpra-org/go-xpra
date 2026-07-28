@@ -9,7 +9,16 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Each backend is compiled only on its own platform, so both have to be
+    # built to know that either still works.
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v7

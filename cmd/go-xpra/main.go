@@ -1,5 +1,6 @@
 // Command go-xpra is a minimal xpra client: it connects to a server over TCP
-// and displays the forwarded windows on the local X11 display.
+// and displays the forwarded windows on the local desktop, through X11 on Linux
+// and through Win32 on Windows.
 //
 // It supports raw RGB pixel data only — no image or video codecs — and needs no
 // cgo. See the README for what is and is not implemented.
@@ -17,11 +18,10 @@ import (
 
 	"github.com/Xpra-org/go-xpra/client"
 	"github.com/Xpra-org/go-xpra/protocol"
-	"github.com/Xpra-org/go-xpra/x11"
 )
 
 const (
-	version        = "0.1.1"
+	version        = "0.2.0"
 	defaultTCPPort = "14500"
 )
 
@@ -55,10 +55,11 @@ func main() {
 func usage() {
 	fmt.Fprintf(os.Stderr, `usage: go-xpra [-v] tcp://[USERNAME[:PASSWORD]@]HOST[:PORT]/
 
-Connects to an xpra server over TCP and shows its windows on $DISPLAY.
+Connects to an xpra server over TCP and shows its windows on the local desktop.
 The default TCP port is 14500.
 
-When credentials are omitted from the URL, USER and XPRA_PASSWORD are used.
+When credentials are omitted from the URL, the local user name and
+XPRA_PASSWORD are used.
 
 Example:
   xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
@@ -74,7 +75,7 @@ func run(rawURL string, verbose bool) error {
 		return err
 	}
 
-	display, err := x11.Open()
+	display, err := openDisplay()
 	if err != nil {
 		return err
 	}

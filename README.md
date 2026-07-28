@@ -1,7 +1,7 @@
 # go-xpra
 
 A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP and shows the
-forwarded windows on the local X11 display.
+forwarded windows on the local desktop — X11 on Linux, Win32 on Windows.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -12,6 +12,9 @@ go build ./cmd/go-xpra
 xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
 ./go-xpra tcp://127.0.0.1/
 ```
+
+The same source builds a `go-xpra.exe` that takes the same arguments and needs no X server on the
+Windows side: each forwarded window becomes a real Windows window.
 
 Connection URLs use Xpra's standard `tcp://[username[:password]@]host[:port]/` form. The port
 defaults to 14500. Other protocols are rejected because this client currently supports TCP only.
@@ -24,18 +27,22 @@ Pass `-v` to log every window event and unhandled packet type.
 - password authentication (the `hmac+sha256` challenge)
 - window create, destroy, move/resize, title changes, and override-redirect popups
 - **raw RGB pixels only** — no image or video codecs at all
-- pointer, keyboard and focus forwarding
-- local window resize is reported back to the server, and the window manager's close button
-  closes the remote application
+- pointer, keyboard and focus forwarding, with keys named the X11 way on both platforms
+- local window resize is reported back to the server, and the title bar's close button closes the
+  remote application
 
 ## What it does not do
 
 Everything else: jpeg/png/webp/h264 and the other encodings, mmap, chunked packets, clipboard,
 audio, cursors, window icons, notifications, bell, system tray, keymap upload, and the
-`ssl`/`ws`/`wss`/`ssh` transports. Linux and X11 only — no Wayland, Windows or macOS.
+`ssl`/`ws`/`wss`/`ssh` transports. Linux and Windows only — no Wayland and no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
 nothing to leave out.
+
+The Windows backend is newer and thinner than the X11 one. It names keys from the active keyboard
+layout, but only as far as printable ASCII: a key that produces anything else has no X11 keysym
+name here and is dropped rather than guessed at, so non-Latin layouts and dead keys do not type.
 
 ## Layout
 
@@ -43,12 +50,15 @@ nothing to leave out.
 | --- | --- |
 | `rencodeplus` | the packet serialization format, encoder and decoder |
 | `protocol` | the 8-byte packet header, the framed connection, typed packet accessors |
-| `client` | the state machine, the hello capabilities, and X-event-to-packet translation |
-| `x11` | the X connection, forwarded windows, and RGB painting |
+| `client` | the state machine, the hello capabilities, and event-to-packet translation |
+| `ui` | all the client sees of the desktop: windows, events, pixel conversion |
+| `x11` | the X connection, forwarded windows, and RGB painting — Linux |
+| `win32` | the window thread, forwarded windows, and RGB painting — Windows |
 | `cmd/go-xpra` | the command line entry point |
 
-Four goroutines: one reads packets from the socket, one writes them, one reads X events, and the
-main one owns all client state and is the only writer to either.
+Four goroutines: one reads packets from the socket, one writes them, one belongs to the local
+desktop — reading X events, or owning the Windows windows and their message loop — and the main
+one owns all client state and is the only writer to either.
 
 ## Notes on the design
 
@@ -58,21 +68,37 @@ Two choices do most of the work of keeping this small.
 out-of-band packets to be spliced back in by index. Turning that off makes pixel data arrive
 inline and removes the entire reassembly path.
 
-**Building directly on X11, via `xgb`.** An xpra client wants real top-level windows at absolute
-positions, unmanaged override-redirect popups, and X11 keycodes — all of which map onto Xlib
-concepts directly and onto a GUI toolkit awkwardly. It also means each window's backing pixmap can
-be the X server's own, installed as the window background, so exposures repaint without the client
-being involved and painting a damage rectangle is one `PutImage` plus one `ClearArea`.
+**Building on the window system directly, with no toolkit.** An xpra client wants real top-level
+windows at absolute positions, unmanaged override-redirect popups, and keys named the way an X
+server names them — all of which map onto a window system's own API directly and onto a GUI
+toolkit awkwardly. So each backend talks to its system as it is: `xgb` on X11, `user32` and
+`gdi32` through `syscall` on Windows, both of them pure Go. What the client sees of either is the
+handful of methods and six events in `ui`.
 
-The hello asks for the `BGRX` and `BGRA` pixel layouts specifically, because they are what the X
-server already wants: painting is then a per-row copy with no channel shuffling.
+The hello asks for the `BGRX` and `BGRA` pixel layouts specifically, because they are what both
+systems already want — an X11 `ZPixmap` at depth 24 and a 32-bit `BI_RGB` DIB have the same byte
+order — so painting is a per-row copy with no channel shuffling.
+
+Where those pixels live is the one place the two backends genuinely differ. On X11 each window's
+backing store is a pixmap on the server, installed as the window background, so exposures repaint
+without the client being involved. Windows has no equivalent, so the buffer is ordinary Go memory
+that `WM_PAINT` blits from: no GDI handles to own, no thread to own them on, and a damage
+rectangle is still just a copy.
+
+**One thread owns the windows on Windows.** A window belongs to the thread that created it, and
+only that thread may pump its messages, so one goroutine is pinned to a thread with
+`runtime.LockOSThread` and does nothing else. The client hands it work through a queue it drains
+on a message posted to an invisible helper window — posted to a window rather than to the thread
+so that the work still gets done inside the modal loops Windows runs while the user drags or
+resizes a window.
 
 ## Testing
 
 `go test ./...` covers the parts that do not need a server or a display: the `rencodeplus` codec
 against byte-exact vectors captured from xpra's own implementation, packet framing including lz4
 and malformed input, the authentication digest against a vector from `xpra.net.digest`, the pixel
-converters, and keysym naming.
+converters, and keysym naming. Each backend's half of that last one is compiled only for its own
+platform, so the keyboard is covered on the machine the tests run on and CI runs them on both.
 
 The rest needs a real server. A useful check beyond "it looks right" is to compare the client's
 rendering against the server's own display pixel for pixel:

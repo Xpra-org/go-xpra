@@ -1,19 +1,16 @@
-// Package x11 renders xpra windows onto the local X server.
-//
-// It is deliberately Linux/X11 specific: xpra forwards real top-level windows
-// with absolute positions, override-redirect popups and X11 keycodes, all of
-// which map one-to-one onto Xlib concepts and awkwardly onto a GUI toolkit.
-// Everything here is pure Go via xgb, with no cgo.
+//go:build linux
+
 package x11
 
 import (
 	"fmt"
 
-	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgbutil"
 	"github.com/jezek/xgbutil/keybind"
 	"github.com/jezek/xgbutil/xprop"
+
+	"github.com/Xpra-org/go-xpra/ui"
 )
 
 // Display is a connection to the X server plus the bits of global state the
@@ -21,10 +18,10 @@ import (
 type Display struct {
 	X *xgbutil.XUtil
 
-	// WMProtocols and WMDeleteWindow identify the "please close" message the
+	// wmProtocols and wmDeleteWindow identify the "please close" message the
 	// window manager sends when the user clicks a titlebar close button.
-	WMProtocols    xproto.Atom
-	WMDeleteWindow xproto.Atom
+	wmProtocols    xproto.Atom
+	wmDeleteWindow xproto.Atom
 
 	// blackGC is the graphics context every window draws through. Pixel
 	// uploads do not consult the GC's colours, so one shared context suffices
@@ -35,9 +32,11 @@ type Display struct {
 	// maxImageBytes is how much pixel data fits in a single PutImage request.
 	maxImageBytes int
 
-	events chan xgb.Event
+	events chan ui.Event
 	done   chan struct{}
 }
+
+var _ ui.Display = (*Display)(nil)
 
 // Open connects to the X server named by $DISPLAY.
 func Open() (*Display, error) {
@@ -51,13 +50,13 @@ func Open() (*Display, error) {
 
 	d := &Display{
 		X:      X,
-		events: make(chan xgb.Event, 256),
+		events: make(chan ui.Event, 256),
 		done:   make(chan struct{}),
 	}
-	if d.WMProtocols, err = xprop.Atm(X, "WM_PROTOCOLS"); err != nil {
+	if d.wmProtocols, err = xprop.Atm(X, "WM_PROTOCOLS"); err != nil {
 		return nil, fmt.Errorf("interning WM_PROTOCOLS: %w", err)
 	}
-	if d.WMDeleteWindow, err = xprop.Atm(X, "WM_DELETE_WINDOW"); err != nil {
+	if d.wmDeleteWindow, err = xprop.Atm(X, "WM_DELETE_WINDOW"); err != nil {
 		return nil, fmt.Errorf("interning WM_DELETE_WINDOW: %w", err)
 	}
 	if err := d.createGC(); err != nil {
@@ -89,9 +88,9 @@ func (d *Display) createGC() error {
 	return nil
 }
 
-// Events returns the channel of incoming X events. It is closed when the
+// Events returns the channel of incoming events. It is closed when the
 // connection to the X server ends.
-func (d *Display) Events() <-chan xgb.Event { return d.events }
+func (d *Display) Events() <-chan ui.Event { return d.events }
 
 // Depth returns the root window's depth, which is what all our windows use.
 func (d *Display) Depth() byte { return d.X.Screen().RootDepth }
@@ -121,8 +120,12 @@ func (d *Display) readLoop() {
 			// destroyed is routine — so log nothing here and carry on.
 			continue
 		}
+		translated, ok := d.translate(event)
+		if !ok {
+			continue
+		}
 		select {
-		case d.events <- event:
+		case d.events <- translated:
 		case <-d.done:
 			return
 		}

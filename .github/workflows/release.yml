@@ -10,16 +10,20 @@ permissions:
 
 jobs:
   build:
-    name: Build Linux ${{ matrix.goarch }}
+    name: Build ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     env:
       UPX_VERSION: "5.2.0"
       UPX_SHA256: "3db5d3294707439db97866feab8d75d800f028f48481a40547411824da4288a1"
     strategy:
       matrix:
-        goarch:
-          - amd64
-          - arm64
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
 
     steps:
       - name: Check out repository
@@ -44,20 +48,30 @@ jobs:
       - name: Build
         env:
           CGO_ENABLED: "0"
-          GOOS: linux
+          GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p build dist
-          go build -trimpath -ldflags="-s -w" -o build/go-xpra ./cmd/go-xpra
-          upx --best --lzma build/go-xpra
-          upx --test build/go-xpra
-          tar -C build -czf "dist/go-xpra-linux-${GOARCH}.tar.gz" go-xpra
+          binary="go-xpra"
+          if [ "${GOOS}" = "windows" ]; then
+            binary="go-xpra.exe"
+          fi
+          go build -trimpath -ldflags="-s -w" -o "build/${binary}" ./cmd/go-xpra
+          upx --best --lzma "build/${binary}"
+          upx --test "build/${binary}"
+          # Each platform gets the archive its users can open without installing
+          # anything.
+          if [ "${GOOS}" = "windows" ]; then
+            (cd build && zip -q "../dist/go-xpra-${GOOS}-${GOARCH}.zip" "${binary}")
+          else
+            tar -C build -czf "dist/go-xpra-${GOOS}-${GOARCH}.tar.gz" "${binary}"
+          fi
 
       - name: Upload build
         uses: actions/upload-artifact@v7
         with:
-          name: go-xpra-linux-${{ matrix.goarch }}
-          path: dist/*.tar.gz
+          name: go-xpra-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/go-xpra-*
           if-no-files-found: error
 
   release:
@@ -68,13 +82,13 @@ jobs:
       - name: Download builds
         uses: actions/download-artifact@v8
         with:
-          pattern: go-xpra-linux-*
+          pattern: go-xpra-*
           path: dist
           merge-multiple: true
 
       - name: Create checksums
         working-directory: dist
-        run: sha256sum go-xpra-linux-*.tar.gz > SHA256SUMS
+        run: sha256sum go-xpra-* > SHA256SUMS
 
       - name: Publish release
         env:

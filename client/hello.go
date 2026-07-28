@@ -1,6 +1,7 @@
 package client
 
 import (
+	"cmp"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -117,7 +118,8 @@ func buildHello(username string) rencodeplus.Dict {
 		caps.Set("hostname", host)
 	}
 	if username == "" {
-		username = os.Getenv("USER")
+		// USER is the Unix spelling and USERNAME the Windows one.
+		username = cmp.Or(os.Getenv("USER"), os.Getenv("USERNAME"))
 	}
 	if username != "" {
 		caps.Set("username", username)
@@ -175,15 +177,25 @@ func machineUUID() string {
 	for _, path := range []string{"/etc/machine-id", "/var/lib/dbus/machine-id"} {
 		if data, err := os.ReadFile(path); err == nil {
 			if id := strings.TrimSpace(string(data)); id != "" {
-				// Hash rather than send the machine-id verbatim: it is meant to
-				// be treated as confidential, and the server only needs
-				// something stable.
-				sum := sha256.Sum256([]byte("go-xpra:" + id))
-				return hex.EncodeToString(sum[:16])
+				return hashedID(id)
 			}
 		}
 	}
+	// Systems without a machine-id file — Windows among them — fall back to the
+	// hostname, which is the most stable name a machine has that costs nothing
+	// to ask for, and which the hello carries in the clear anyway.
+	if host, err := os.Hostname(); err == nil && host != "" {
+		return hashedID(host)
+	}
 	return randomHex(16)
+}
+
+// hashedID turns a machine identifier into the form we send. It is hashed
+// rather than sent verbatim because a machine-id is meant to be treated as
+// confidential, and the server only needs something stable.
+func hashedID(id string) string {
+	sum := sha256.Sum256([]byte("go-xpra:" + id))
+	return hex.EncodeToString(sum[:16])
 }
 
 func randomHex(n int) string {

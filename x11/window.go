@@ -1,3 +1,5 @@
+//go:build linux
+
 package x11
 
 import (
@@ -7,6 +9,8 @@ import (
 	"github.com/jezek/xgbutil/ewmh"
 	"github.com/jezek/xgbutil/icccm"
 	"github.com/jezek/xgbutil/xwindow"
+
+	"github.com/Xpra-org/go-xpra/ui"
 )
 
 // eventMask is what we ask the X server to report for each forwarded window.
@@ -21,10 +25,6 @@ const eventMask = xproto.EventMaskStructureNotify |
 	xproto.EventMaskKeyPress |
 	xproto.EventMaskKeyRelease |
 	xproto.EventMaskFocusChange
-
-// bytesPerPixel is the size of a pixel in the X server's 24-depth ZPixmap
-// format, which pads each pixel to 32 bits.
-const bytesPerPixel = 4
 
 // Window is one forwarded xpra window.
 //
@@ -47,12 +47,14 @@ type Window struct {
 	overrideRedirect    bool
 }
 
+var _ ui.Window = (*Window)(nil)
+
 // NewWindow creates an unmapped top-level window at the given geometry.
 //
 // Override-redirect windows (menus, tooltips) bypass the local window manager
 // entirely, which is what lets them land exactly where the server put them.
-func (d *Display) NewWindow(x, y, width, height int, overrideRedirect bool) (*Window, error) {
-	width, height = clampSize(width, height)
+func (d *Display) NewWindow(x, y, width, height int, overrideRedirect bool) (ui.Window, error) {
+	width, height = ui.ClampSize(width, height)
 
 	win, err := xwindow.Generate(d.X)
 	if err != nil {
@@ -89,7 +91,7 @@ func (d *Display) NewWindow(x, y, width, height int, overrideRedirect bool) (*Wi
 }
 
 // ID returns the X window id, used to route incoming events back to this window.
-func (w *Window) ID() xproto.Window { return w.win.Id }
+func (w *Window) ID() ui.WindowID { return ui.WindowID(w.win.Id) }
 
 // Geometry returns the window's position and size as we last knew it.
 func (w *Window) Geometry() (x, y, width, height int) {
@@ -117,7 +119,7 @@ func (w *Window) Destroy() {
 // MoveResize applies a server-driven geometry change, reallocating the pixmap
 // if the size changed.
 func (w *Window) MoveResize(x, y, width, height int) error {
-	width, height = clampSize(width, height)
+	width, height = ui.ClampSize(width, height)
 	resized := width != w.width || height != w.height
 
 	w.x, w.y = x, y
@@ -134,7 +136,7 @@ func (w *Window) MoveResize(x, y, width, height int) error {
 // Resized records a size change the X server has already applied — for instance
 // because the local window manager resized us — and reallocates the pixmap.
 func (w *Window) Resized(x, y, width, height int) error {
-	width, height = clampSize(width, height)
+	width, height = ui.ClampSize(width, height)
 	w.x, w.y = x, y
 	if width == w.width && height == w.height {
 		return nil
@@ -179,49 +181,25 @@ func (w *Window) freePixmap() {
 }
 
 // Paint uploads a decoded RGB rectangle to the window.
-//
-// rowstride is the number of bytes between the start of consecutive rows in the
-// source, which the server computes as roundup(width*bytesPerPixel, 4) and may
-// make larger still — so it is never safe to assume the payload is tightly
-// packed.
 func (w *Window) Paint(x, y, width, height int, pixels []byte, rowstride int, format string) error {
 	if w.pixmap == 0 {
 		return fmt.Errorf("window has no pixmap")
 	}
-	conv, srcBytesPerPixel, err := converterFor(format)
+	width, height, err := ui.ClipDamage(x, y, width, height, w.width, w.height)
 	if err != nil {
 		return err
 	}
-	if rowstride < width*srcBytesPerPixel {
-		return fmt.Errorf("rowstride %d is too small for %d pixels of %s", rowstride, width, format)
-	}
-	if need := rowstride * height; len(pixels) < need {
-		return fmt.Errorf("got %d bytes of %s pixels, need %d for %dx%d at rowstride %d",
-			len(pixels), format, need, width, height, rowstride)
-	}
-
-	// Clip against the window: the server can send damage sized to what it
-	// believes the window to be while a resize is still in flight.
-	if x < 0 || y < 0 {
-		return fmt.Errorf("negative damage origin %d,%d", x, y)
-	}
-	if x >= w.width || y >= w.height {
-		return nil
-	}
-	width = min(width, w.width-x)
-	height = min(height, w.height-y)
-	if width <= 0 || height <= 0 {
+	if width == 0 || height == 0 {
 		return nil
 	}
 
-	dstStride := width * bytesPerPixel
+	dstStride := width * ui.BytesPerPixel
 	if cap(w.scratch) < dstStride*height {
 		w.scratch = make([]byte, dstStride*height)
 	}
 	dst := w.scratch[:dstStride*height]
-	for row := 0; row < height; row++ {
-		conv(dst[row*dstStride:(row+1)*dstStride],
-			pixels[row*rowstride:row*rowstride+width*srcBytesPerPixel])
+	if err := ui.Convert(dst, dstStride, pixels, rowstride, width, height, format); err != nil {
+		return err
 	}
 
 	w.putImage(x, y, width, height, dst)
@@ -235,7 +213,7 @@ func (w *Window) Paint(x, y, width, height int, pixels []byte, rowstride int, fo
 // putImage uploads tightly packed pixels to the backing pixmap, splitting the
 // transfer into as many requests as the X server's maximum request size needs.
 func (w *Window) putImage(x, y, width, height int, data []byte) {
-	stride := width * bytesPerPixel
+	stride := width * ui.BytesPerPixel
 	rowsPerRequest := max(1, w.d.maxImageBytes/stride)
 
 	for row := 0; row < height; row += rowsPerRequest {
@@ -245,58 +223,4 @@ func (w *Window) putImage(x, y, width, height int, data []byte) {
 			uint16(width), uint16(rows), int16(x), int16(y+row),
 			0, w.d.Depth(), data[row*stride:(row+rows)*stride])
 	}
-}
-
-// converter copies one row of source pixels into the X server's B,G,R,X layout.
-// dst is always 4 bytes per pixel.
-type converter func(dst, src []byte)
-
-// converterFor returns the row converter and source bytes-per-pixel for an xpra
-// rgb_format name.
-//
-// The format names are literal memory byte orders, and their length is the
-// bytes per pixel (xpra/codecs/rgb_transform.py:118). We advertise only BGRX
-// and BGRA, which need no conversion at all on a little-endian X server; the
-// rest are here so that a server ignoring that preference degrades to slow
-// rather than to wrong.
-func converterFor(format string) (converter, int, error) {
-	switch format {
-	case "BGRX", "BGRA":
-		return copy4, 4, nil
-	case "RGBX", "RGBA":
-		return swapRB4, 4, nil
-	case "BGR":
-		return expandBGR, 3, nil
-	case "RGB":
-		return expandRGB, 3, nil
-	}
-	return nil, 0, fmt.Errorf("unsupported pixel format %q", format)
-}
-
-// copy4 handles BGRX and BGRA, which already match the X server's layout. The
-// X byte of BGRX lands in the unused fourth byte, which a depth-24 window ignores.
-func copy4(dst, src []byte) { copy(dst, src) }
-
-func swapRB4(dst, src []byte) {
-	for i := 0; i+3 < len(src); i += 4 {
-		dst[i], dst[i+1], dst[i+2], dst[i+3] = src[i+2], src[i+1], src[i], src[i+3]
-	}
-}
-
-func expandBGR(dst, src []byte) {
-	for i, j := 0, 0; i+2 < len(src); i, j = i+3, j+4 {
-		dst[j], dst[j+1], dst[j+2], dst[j+3] = src[i], src[i+1], src[i+2], 0xff
-	}
-}
-
-func expandRGB(dst, src []byte) {
-	for i, j := 0, 0; i+2 < len(src); i, j = i+3, j+4 {
-		dst[j], dst[j+1], dst[j+2], dst[j+3] = src[i+2], src[i+1], src[i], 0xff
-	}
-}
-
-// clampSize keeps window dimensions inside what the X protocol allows: zero is
-// a CreateWindow error, and the wire format caps them at 16 bits.
-func clampSize(width, height int) (int, int) {
-	return min(max(width, 1), 0xffff), min(max(height, 1), 0xffff)
 }

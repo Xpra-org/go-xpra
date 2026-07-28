@@ -1,4 +1,6 @@
-package client
+//go:build linux
+
+package x11
 
 import (
 	"testing"
@@ -47,7 +49,7 @@ func TestKeysymName(t *testing.T) {
 	}
 }
 
-// An unmapped keysym must produce no name, so the caller can drop the event
+// An unmapped keysym must produce no name, so the client can drop the event
 // rather than send the server something meaningless.
 func TestKeysymNameUnmapped(t *testing.T) {
 	if got := keysymName(0); got != "" {
@@ -55,7 +57,7 @@ func TestKeysymNameUnmapped(t *testing.T) {
 	}
 }
 
-func TestKeyString(t *testing.T) {
+func TestKeyText(t *testing.T) {
 	cases := map[xproto.Keysym]string{
 		'a':    "a",
 		'{':    "{",
@@ -64,8 +66,8 @@ func TestKeyString(t *testing.T) {
 		0xffaa: "", // keypad multiply is outside the printable range
 	}
 	for keysym, want := range cases {
-		if got := keyString(keysym); got != want {
-			t.Errorf("keyString(%#x) = %q, want %q", keysym, got, want)
+		if got := keyText(keysym); got != want {
+			t.Errorf("keyText(%#x) = %q, want %q", keysym, got, want)
 		}
 	}
 }
