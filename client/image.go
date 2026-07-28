@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/Xpra-org/go-xpra/ui"
+	"golang.org/x/image/webp"
 )
 
 // maxImageDimension matches xpra's own limit for dimensions read from an
@@ -22,8 +23,8 @@ const maxImageDimension = 16384
 // separately by the protocol reader.
 const maxDecodedImageBytes = 256 << 20
 
-// decodeImage decodes one complete JPEG or PNG damage rectangle into the BGRX
-// layout consumed by both desktop backends.
+// decodeImage decodes one complete JPEG, PNG or WebP damage rectangle into the
+// BGRX layout consumed by both desktop backends.
 //
 // PNG's palette and grayscale variants differ only in the coding name on the
 // wire; the encoded payload is an ordinary PNG in every case.
@@ -37,6 +38,8 @@ func decodeImage(coding string, data []byte, width, height int) ([]byte, int, er
 		decode, decodeConfig = jpeg.Decode, jpeg.DecodeConfig
 	case "png", "png/P", "png/L":
 		decode, decodeConfig = png.Decode, png.DecodeConfig
+	case "webp":
+		decode, decodeConfig = webp.Decode, webp.DecodeConfig
 	default:
 		return nil, 0, fmt.Errorf("unsupported image encoding %q", coding)
 	}
@@ -75,7 +78,7 @@ func decodeImage(coding string, data []byte, width, height int) ([]byte, int, er
 		for x := 0; x < width; x++ {
 			// RGBA returns alpha-premultiplied channels. Since the hello says
 			// this client has no transparent backing store, that naturally
-			// composites an unexpected translucent PNG over black.
+			// composites an unexpected translucent image over black.
 			r, g, b, _ := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
 			i := y*stride + x*ui.BytesPerPixel
 			pixels[i], pixels[i+1], pixels[i+2], pixels[i+3] =

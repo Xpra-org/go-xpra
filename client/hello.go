@@ -71,17 +71,17 @@ func buildHello(username string) rencodeplus.Dict {
 		// real wire encoding. png/P and png/L are ordinary palette and
 		// grayscale PNG payloads.
 		{Key: "encodings", Value: []string{
-			"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L",
+			"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L", "webp",
 		}},
 		{Key: "encoding", Value: rencodeplus.Dict{
 			{Key: "options", Value: []string{
-				"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L",
+				"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L", "webp",
 			}},
 			{Key: "core", Value: []string{
-				"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L",
+				"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L", "webp",
 			}},
 
-			// Let the server choose raw RGB for small updates, JPEG when lossy
+			// Let the server choose raw RGB for small updates, JPEG or WebP when
 			// compression is worthwhile, and PNG for lossless refreshes.
 			{Key: "setting", Value: "auto"},
 

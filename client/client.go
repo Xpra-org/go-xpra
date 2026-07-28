@@ -367,7 +367,7 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 			format = map[string]string{"rgb24": "RGB", "rgb32": "RGBX"}[coding]
 		}
 
-	case "jpeg", "png", "png/P", "png/L":
+	case "jpeg", "png", "png/P", "png/L", "webp":
 		var err error
 		pixels, rowstride, err = decodeImage(coding, pixels, width, height)
 		if err != nil {

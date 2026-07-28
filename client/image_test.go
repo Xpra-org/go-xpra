@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -104,6 +105,30 @@ func TestDecodeJPEG(t *testing.T) {
 	}
 }
 
+func TestDecodeWebP(t *testing.T) {
+	// A 2x2 lossy WebP containing solid red pixels. Keeping the tiny encoded
+	// fixture inline makes this test independent of external WebP tools.
+	encoded, err := hex.DecodeString(
+		"524946463c000000574542505650382030000000d001009d012a02000200" +
+			"02003425a00274ba01f80003b000fef0c40bff20b96175c8d7ff203fe407" +
+			"fc80fff8f2000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, stride, err := decodeImage("webp", encoded, 2, 2)
+	if err != nil {
+		t.Fatalf("decodeImage: %v", err)
+	}
+	if stride != 2*4 || len(got) != 2*2*4 {
+		t.Fatalf("got stride %d and %d bytes, want 8 and 16", stride, len(got))
+	}
+	// WebP is lossy, so check the channel order and approximate colour.
+	b, g, r, x := got[0], got[1], got[2], got[3]
+	if r < 200 || g > 60 || b > 40 || x != 0xff {
+		t.Errorf("first BGRX pixel = %v, want approximately [0 0 255 255]", got[:4])
+	}
+}
+
 func TestDecodeImageRejectsBadInput(t *testing.T) {
 	var valid bytes.Buffer
 	if err := png.Encode(&valid, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
@@ -120,7 +145,7 @@ func TestDecodeImageRejectsBadInput(t *testing.T) {
 		{"wrong codec", "jpeg", valid.Bytes(), 2, 2},
 		{"wrong width", "png", valid.Bytes(), 3, 2},
 		{"wrong height", "png", valid.Bytes(), 2, 3},
-		{"unsupported", "webp", valid.Bytes(), 2, 2},
+		{"unsupported", "avif", valid.Bytes(), 2, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

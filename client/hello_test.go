@@ -122,7 +122,7 @@ func TestBuildHello(t *testing.T) {
 		}
 	}
 	core, _ := encoding["core"].([]any)
-	for _, want := range []string{"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L"} {
+	for _, want := range []string{"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L", "webp"} {
 		found := false
 		for _, got := range core {
 			if got == want {
