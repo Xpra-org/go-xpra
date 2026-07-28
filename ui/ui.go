@@ -51,6 +51,9 @@ type Window interface {
 	// Map shows the window.
 	Map()
 
+	// Raise brings the window to the front of the local desktop.
+	Raise()
+
 	// Destroy releases the window and its pixels.
 	Destroy()
 

@@ -159,6 +159,8 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleMoveResize(packet)
 	case "window-metadata":
 		c.handleMetadata(packet)
+	case "window-raise":
+		c.handleRaiseWindow(packet)
 	case "window-draw":
 		c.handleDraw(packet)
 
@@ -334,6 +336,16 @@ func (c *Client) handleMetadata(packet protocol.Packet) {
 	if metadata.Has("title") {
 		window.SetTitle(metadata.Str("title"))
 	}
+}
+
+func (c *Client) handleRaiseWindow(packet protocol.Packet) {
+	wid := packet.Int(1)
+	window, ok := c.windows[wid]
+	if !ok {
+		c.debugf("cannot raise window %d: not found", wid)
+		return
+	}
+	window.Raise()
 }
 
 // handleDraw paints one damage rectangle.

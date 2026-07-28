@@ -131,6 +131,15 @@ func (w *Window) Map() {
 	w.d.post(func() { showWindow(w.hwnd, command) })
 }
 
+// Raise brings the window to the top of the normal z-order. Omitting
+// SWP_NOACTIVATE matches Xpra's "present" semantics as closely as Win32
+// permits; Windows may still reject foreground activation for another process.
+func (w *Window) Raise() {
+	w.d.post(func() {
+		setWindowPos(w.hwnd, hwndTop, 0, 0, 0, 0, swpNoMove|swpNoSize)
+	})
+}
+
 // Destroy releases the window. Its pixels go with it, being ordinary memory.
 func (w *Window) Destroy() {
 	w.d.post(func() { destroyWindow(w.hwnd) })
@@ -152,7 +161,7 @@ func (w *Window) MoveResize(x, y, width, height int) error {
 		return err
 	}
 	w.d.post(func() {
-		setWindowPos(w.hwnd, outer.Left, outer.Top,
+		setWindowPos(w.hwnd, 0, outer.Left, outer.Top,
 			outer.Right-outer.Left, outer.Bottom-outer.Top, swpNoZOrder|swpNoActivate)
 	})
 	return nil

@@ -65,8 +65,11 @@ const (
 
 	swShow             = 5
 	swShowNoActivate   = 4
+	swpNoSize          = 0x0001
+	swpNoMove          = 0x0002
 	swpNoZOrder        = 0x0004
 	swpNoActivate      = 0x0010
+	hwndTop            = 0           // HWND_TOP
 	hwndMessage        = ^uintptr(2) // (HWND)-3, the parent of message-only windows
 	idcArrow           = 32512
 	dpiPerMonitorAware = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, (HANDLE)-4
@@ -234,8 +237,8 @@ func setWindowText(hwnd syscall.Handle, title *uint16) {
 	procSetWindowText.Call(uintptr(hwnd), uintptr(unsafe.Pointer(title)))
 }
 
-func setWindowPos(hwnd syscall.Handle, x, y, width, height int32, flags uint32) {
-	procSetWindowPos.Call(uintptr(hwnd), 0,
+func setWindowPos(hwnd, insertAfter syscall.Handle, x, y, width, height int32, flags uint32) {
+	procSetWindowPos.Call(uintptr(hwnd), uintptr(insertAfter),
 		uintptr(x), uintptr(y), uintptr(width), uintptr(height), uintptr(flags))
 }
 

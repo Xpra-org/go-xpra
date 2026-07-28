@@ -110,6 +110,15 @@ func (w *Window) SetTitle(title string) {
 // Map shows the window.
 func (w *Window) Map() { w.win.Map() }
 
+// Raise asks the window manager to activate the window and also issues a
+// direct stacking request, which covers override-redirect windows.
+func (w *Window) Raise() {
+	w.win.Stack(xproto.StackModeAbove)
+	if !w.overrideRedirect {
+		_ = ewmh.ActiveWindowReq(w.d.X, w.win.Id)
+	}
+}
+
 // Destroy releases the window and its pixmap.
 func (w *Window) Destroy() {
 	w.freePixmap()
