@@ -1,0 +1,4 @@
+# Everything here is text, and the tools that read it — gofmt, the compiler, the
+# shell in the CI workflows — want LF. Pinning it keeps a clone on a machine with
+# core.autocrlf set from checking the tree out as CRLF, which gofmt then rejects.
+* text=auto eol=lf
