@@ -58,6 +58,10 @@ type Window interface {
 	// Raise brings the window to the front of the local desktop.
 	Raise()
 
+	// Minimize hides or restores the window using the local desktop's native
+	// minimized state.
+	Minimize(minimized bool)
+
 	// Destroy releases the window and its pixels.
 	Destroy()
 

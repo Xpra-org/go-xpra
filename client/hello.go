@@ -65,6 +65,7 @@ func buildHello(username string) rencodeplus.Dict {
 		{Key: "keyboard", Value: true},
 		{Key: "mouse", Value: true},
 		{Key: "bell", Value: true},
+		{Key: "show-desktop", Value: true},
 		{Key: "ping", Value: true},
 
 		// Receive desktop notifications for logging. The singular boolean is

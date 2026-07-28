@@ -114,6 +114,9 @@ func TestBuildHello(t *testing.T) {
 	if !got.Bool("bell") {
 		t.Error("bell must be enabled to receive forwarded bell events")
 	}
+	if !got.Bool("show-desktop") {
+		t.Error("show-desktop must be enabled to receive minimize and restore requests")
+	}
 	if !got.Bool("notification") {
 		t.Error("the modern notification capability must be enabled")
 	}

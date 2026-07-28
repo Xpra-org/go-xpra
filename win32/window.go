@@ -140,6 +140,15 @@ func (w *Window) Raise() {
 	})
 }
 
+// Minimize changes the native Win32 show state without affecting geometry.
+func (w *Window) Minimize(minimized bool) {
+	command := int32(swRestore)
+	if minimized {
+		command = swMinimize
+	}
+	w.d.post(func() { showWindow(w.hwnd, command) })
+}
+
 // Destroy releases the window. Its pixels go with it, being ordinary memory.
 func (w *Window) Destroy() {
 	w.d.post(func() { destroyWindow(w.hwnd) })

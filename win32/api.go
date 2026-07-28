@@ -66,6 +66,8 @@ const (
 
 	swShow             = 5
 	swShowNoActivate   = 4
+	swMinimize         = 6
+	swRestore          = 9
 	swpNoSize          = 0x0001
 	swpNoMove          = 0x0002
 	swpNoZOrder        = 0x0004

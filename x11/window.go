@@ -119,6 +119,25 @@ func (w *Window) Raise() {
 	}
 }
 
+// Minimize asks the window manager for ICCCM IconicState, or activates the
+// window to restore it. Override-redirect popups have no window manager, so
+// map/unmap is their equivalent.
+func (w *Window) Minimize(minimized bool) {
+	if w.overrideRedirect {
+		if minimized {
+			w.win.Unmap()
+		} else {
+			w.win.Map()
+		}
+		return
+	}
+	if minimized {
+		_ = ewmh.ClientEvent(w.d.X, w.win.Id, "WM_CHANGE_STATE", icccm.StateIconic)
+	} else {
+		_ = ewmh.ActiveWindowReq(w.d.X, w.win.Id)
+	}
+}
+
 // Destroy releases the window and its pixmap.
 func (w *Window) Destroy() {
 	w.freePixmap()

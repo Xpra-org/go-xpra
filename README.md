@@ -32,7 +32,8 @@ Pass `-v` to log every window event and unhandled packet type.
 
 - plain TCP transport, `rencodeplus` packet encoding, inbound `lz4` decompression
 - password authentication (the `hmac+sha256` challenge)
-- window create, destroy, move/resize, raise, title changes, and override-redirect popups
+- window create, destroy, move/resize, raise, minimize/restore, title changes, and
+  override-redirect popups
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
 - pointer, keyboard and focus forwarding, with keys named the X11 way on both platforms
 - forwarded application bells using the native X11 or Win32 sound

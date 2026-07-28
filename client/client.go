@@ -153,6 +153,8 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleNotificationShow(packet)
 	case "notification-close":
 		c.handleNotificationClose(packet)
+	case "show-desktop":
+		c.handleShowDesktop(packet)
 
 	case "window-create":
 		c.handleNewWindow(packet, false)
@@ -234,6 +236,17 @@ func (c *Client) handleNotificationClose(packet protocol.Packet) {
 		return
 	}
 	c.debugf("notification %d closed", packet.Int(1))
+}
+
+// handleShowDesktop minimizes all forwarded windows to reveal the local
+// desktop, or restores them when show is false. A short packet defaults to
+// restore, matching the protocol's false zero value.
+func (c *Client) handleShowDesktop(packet protocol.Packet) {
+	show := len(packet) >= 2 && packet.Bool(1)
+	c.debugf("show-desktop: %v", show)
+	for _, window := range c.windows {
+		window.Minimize(show)
+	}
 }
 
 func (c *Client) handleHello(packet protocol.Packet) {
