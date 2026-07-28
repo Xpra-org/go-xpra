@@ -41,7 +41,7 @@ func Dial(address string) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newConn(netConn), nil
+	return New(netConn), nil
 }
 
 // DialTLS connects to an xpra server over TLS and starts the read/write loops.
@@ -54,10 +54,14 @@ func DialTLS(address string, config *tls.Config) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newConn(netConn), nil
+	return New(netConn), nil
 }
 
-func newConn(netConn net.Conn) *Conn {
+// New frames an existing stream socket and starts the read/write loops.
+//
+// The framing is the same in both directions, so this also serves the accepted
+// side of a connection, which is how the mock server stands in for a real one.
+func New(netConn net.Conn) *Conn {
 	c := &Conn{
 		conn:    netConn,
 		packets: make(chan Packet, 64),
