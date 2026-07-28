@@ -166,8 +166,21 @@ queue, keysym naming, and the parser for the XKB keymap a Wayland compositor han
 backend's share of that is compiled only for its own platform, so the keyboard is covered on the
 machine the tests run on and CI runs them on both.
 
-The rest needs a real server. A useful check beyond "it looks right" is to compare the client's
-rendering against the server's own display pixel for pixel:
+`internal/mockserver` covers the next layer without needing xpra installed at all: it is a fake
+server that forwards one window of known pixels, so the window lifecycle, the paint path and the
+input path can be run end to end with nothing but Go.
+
+```shell
+go run ./internal/mockserver &
+go run ./cmd/go-xpra tcp://127.0.0.1:14500/
+```
+
+[internal/README.md](internal/README.md) says what should appear on screen, what it means when it
+does not, and what to read in the packets it logs back.
+
+The encodings it does not speak, and anything involving a real application, still need a real
+server. A useful check beyond "it looks right" is to compare the client's rendering against the
+server's own display pixel for pixel:
 
 ```shell
 xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
