@@ -19,14 +19,14 @@ import (
 // applies back-pressure to the sender instead of growing without limit.
 const writeQueue = 256
 
-// Conn is a framed xpra connection over a stream socket.
+// Conn is a framed xpra connection over a bidirectional stream.
 //
 // Incoming packets are decoded on a reader goroutine and delivered on Packets;
 // outgoing packets are serialized by a writer goroutine, so Send is safe to
 // call from any goroutine. Both loops stop on the first error, which Err
 // reports once Packets has been closed.
 type Conn struct {
-	conn    net.Conn
+	conn    io.ReadWriteCloser
 	packets chan Packet
 	writes  chan []byte
 
@@ -57,13 +57,13 @@ func DialTLS(address string, config *tls.Config) (*Conn, error) {
 	return New(netConn), nil
 }
 
-// New frames an existing stream socket and starts the read/write loops.
+// New frames an existing bidirectional stream and starts the read/write loops.
 //
 // The framing is the same in both directions, so this also serves the accepted
 // side of a connection, which is how the mock server stands in for a real one.
-func New(netConn net.Conn) *Conn {
+func New(stream io.ReadWriteCloser) *Conn {
 	c := &Conn{
-		conn:    netConn,
+		conn:    stream,
 		packets: make(chan Packet, 64),
 		writes:  make(chan []byte, writeQueue),
 	}

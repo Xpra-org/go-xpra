@@ -1,6 +1,6 @@
-// Command go-xpra is a minimal xpra client: it connects to a server over TCP
-// or TLS and displays the forwarded windows on the local desktop, through X11 or
-// Wayland on Linux and through Win32 on Windows.
+// Command go-xpra is a minimal xpra client: it connects to a server over TCP,
+// TLS or SSH and displays the forwarded windows on the local desktop, through
+// X11 or Wayland on Linux and through Win32 on Windows.
 //
 // It supports raw RGB, JPEG, PNG and WebP pixels, and needs no cgo. See the
 // README for what is and is not implemented.
@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/Xpra-org/go-xpra/client"
 	"github.com/Xpra-org/go-xpra/protocol"
@@ -27,14 +28,25 @@ import (
 const (
 	version        = "0.2.1"
 	defaultTCPPort = "14500"
+	defaultSSHPort = "22"
+)
+
+type connectionTransport string
+
+const (
+	transportTCP connectionTransport = "tcp"
+	transportSSL connectionTransport = "ssl"
+	transportSSH connectionTransport = "ssh"
 )
 
 type connectionURL struct {
+	transport  connectionTransport
 	address    string
 	serverName string
+	port       string
+	display    string
 	username   string
 	password   string
-	secure     bool
 }
 
 type sslOptions struct {
@@ -82,16 +94,20 @@ func main() {
 func usage() {
 	fmt.Fprintf(os.Stderr, `usage: go-xpra
        go-xpra [OPTIONS] (tcp|ssl)://[USERNAME[:PASSWORD]@]HOST[:PORT]/
+       go-xpra [OPTIONS] ssh://[USERNAME[:PASSWORD]@]HOST[:PORT]/[DISPLAY]
 
 Connects to an xpra server and shows its windows on the local desktop.
-The default port is 14500. ssl:// verifies the server certificate and hostname
-using the system trust store unless an SSL option says otherwise.
+The default TCP/SSL port is 14500 and the default SSH port is 22. ssl://
+verifies the server certificate and hostname using the system trust store
+unless an SSL option says otherwise.
 
 With no arguments, a connection dialog collects the protocol, credentials,
-host and port.
+host, port and optional SSH display.
 
 When credentials are omitted from the URL, the local user name is used.
-Passwords come from XPRA_PASSWORD or an interactive system prompt.
+For TCP/SSL, passwords come from XPRA_PASSWORD or an interactive system
+prompt. SSH authentication uses the system ssh client; a password in an SSH
+URL is supplied through sshpass.
 
 Example:
   xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
@@ -99,6 +115,9 @@ Example:
 
 For a TLS server using a private CA:
   go-xpra --ssl-ca-cert /path/to/ca.pem ssl://server.example.com/
+
+For an existing Xpra display reached through SSH:
+  go-xpra ssh://alice@server.example.com/100
 
 `)
 	printOptionDefaults(os.Stderr, flag.CommandLine)
@@ -215,13 +234,27 @@ func runConnectionDialog(verbose bool, ssl sslOptions) error {
 func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.Config, display ui.Display) error {
 	var conn *protocol.Conn
 	var err error
-	if target.secure {
+	clientPassword := target.password
+	switch target.transport {
+	case transportSSL:
 		if ssl.insecure {
 			log.Printf("warning: TLS certificate verification is disabled")
 		}
 		conn, err = protocol.DialTLS(target.address, tlsConfig)
-	} else {
+	case transportSSH:
+		var stream io.ReadWriteCloser
+		stream, err = dialSSH(target)
+		if err == nil {
+			conn = protocol.New(stream)
+			// A password in an ssh:// URL belongs to the SSH login. If the
+			// proxied Xpra connection separately challenges us, use the normal
+			// XPRA_PASSWORD / interactive-prompt path.
+			clientPassword = ""
+		}
+	case transportTCP:
 		conn, err = protocol.Dial(target.address)
+	default:
+		err = fmt.Errorf("unsupported transport %q", target.transport)
 	}
 	if err != nil {
 		return fmt.Errorf("connecting to %s: %w", target.address, err)
@@ -229,7 +262,7 @@ func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.
 	defer conn.Close()
 
 	log.Printf("connected to %s", target.address)
-	xpraClient := client.New(conn, display, verbose, target.username, target.password)
+	xpraClient := client.New(conn, display, verbose, target.username, clientPassword)
 	promptUsername := target.username
 	if promptUsername == "" {
 		promptUsername = os.Getenv("USER")
@@ -243,8 +276,8 @@ func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.
 	return xpraClient.Run()
 }
 
-// parseConnectionURL accepts the standard Xpra TCP and SSL URL forms and
-// returns the socket address separately from credentials so passwords never
+// parseConnectionURL accepts the standard Xpra TCP, SSL and SSH URL forms and
+// returns connection details separately from credentials so passwords never
 // reach logs.
 func parseConnectionURL(raw string) (connectionURL, error) {
 	u, err := url.Parse(raw)
@@ -255,16 +288,18 @@ func parseConnectionURL(raw string) (connectionURL, error) {
 		return connectionURL{}, fmt.Errorf("invalid Xpra URL: %w", err)
 	}
 	scheme := strings.ToLower(u.Scheme)
-	if scheme != "tcp" && scheme != "ssl" {
+	transport := connectionTransport(scheme)
+	if transport != transportTCP && transport != transportSSL && transport != transportSSH {
 		if u.Scheme == "" {
-			return connectionURL{}, fmt.Errorf("invalid Xpra URL: a tcp:// or ssl:// URL is required")
+			return connectionURL{}, fmt.Errorf("invalid Xpra URL: a tcp://, ssl:// or ssh:// URL is required")
 		}
-		return connectionURL{}, fmt.Errorf("unsupported Xpra URL protocol %q: only tcp and ssl are supported", u.Scheme)
+		return connectionURL{}, fmt.Errorf(
+			"unsupported Xpra URL protocol %q: only tcp, ssl and ssh are supported", u.Scheme)
 	}
 	if u.Opaque != "" || u.Host == "" {
 		return connectionURL{}, fmt.Errorf("invalid Xpra %s URL: host is required", strings.ToUpper(scheme))
 	}
-	if u.Path != "" && u.Path != "/" {
+	if transport != transportSSH && u.Path != "" && u.Path != "/" {
 		return connectionURL{}, fmt.Errorf("invalid Xpra %s URL: path must be empty or /", strings.ToUpper(scheme))
 	}
 	if u.RawQuery != "" || u.Fragment != "" {
@@ -275,12 +310,19 @@ func parseConnectionURL(raw string) (connectionURL, error) {
 	if host == "" {
 		return connectionURL{}, fmt.Errorf("invalid Xpra %s URL: host is required", strings.ToUpper(scheme))
 	}
+	if transport == transportSSH && strings.HasPrefix(host, "-") {
+		return connectionURL{}, fmt.Errorf("invalid Xpra SSH URL: host cannot begin with -")
+	}
 	port := u.Port()
 	if port == "" {
 		if strings.HasSuffix(u.Host, ":") {
 			return connectionURL{}, fmt.Errorf("invalid Xpra %s URL: port is empty", strings.ToUpper(scheme))
 		}
-		port = defaultTCPPort
+		if transport == transportSSH {
+			port = defaultSSHPort
+		} else {
+			port = defaultTCPPort
+		}
 	} else {
 		number, err := strconv.ParseUint(port, 10, 16)
 		if err != nil || number == 0 {
@@ -289,10 +331,22 @@ func parseConnectionURL(raw string) (connectionURL, error) {
 		port = strconv.FormatUint(number, 10)
 	}
 
+	display := ""
+	if transport == transportSSH && u.Path != "" && u.Path != "/" {
+		display = strings.TrimPrefix(u.Path, "/")
+		if display == "" || strings.Contains(display, "/") ||
+			strings.IndexFunc(display, unicode.IsControl) >= 0 {
+			return connectionURL{}, fmt.Errorf(
+				"invalid Xpra SSH URL: display must be a single non-empty path segment")
+		}
+	}
+
 	target := connectionURL{
+		transport:  transport,
 		address:    net.JoinHostPort(host, port),
 		serverName: host,
-		secure:     scheme == "ssl",
+		port:       port,
+		display:    display,
 	}
 	if u.User != nil {
 		target.username = u.User.Username()
@@ -302,7 +356,7 @@ func parseConnectionURL(raw string) (connectionURL, error) {
 }
 
 func makeTLSConfig(target connectionURL, options sslOptions) (*tls.Config, error) {
-	if !target.secure {
+	if target.transport != transportSSL {
 		if options.caCert != "" || options.insecure {
 			return nil, fmt.Errorf("SSL options require an ssl:// URL")
 		}

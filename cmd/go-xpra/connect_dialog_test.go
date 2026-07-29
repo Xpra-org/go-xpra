@@ -31,6 +31,14 @@ func TestConnectionFormProtocolChangePopulatesDefaultPort(t *testing.T) {
 	if got := form.port.string(); got != dialogProtocols[1].defaultPort {
 		t.Errorf("port = %q, want protocol default %q", got, dialogProtocols[1].defaultPort)
 	}
+
+	form.selectProtocol(2)
+	if got := dialogProtocols[form.protocol].name; got != "ssh" {
+		t.Errorf("protocol = %q, want ssh", got)
+	}
+	if got := form.port.string(); got != defaultSSHPort {
+		t.Errorf("port = %q, want SSH default %q", got, defaultSSHPort)
+	}
 }
 
 func TestConnectionFormTarget(t *testing.T) {
@@ -54,8 +62,34 @@ func TestConnectionFormTarget(t *testing.T) {
 	if target.username != "alice" || target.password != "secret" {
 		t.Errorf("credentials = %q/%q, want alice/secret", target.username, target.password)
 	}
-	if !target.secure {
-		t.Error("secure = false, want true")
+	if target.transport != transportSSL {
+		t.Errorf("transport = %q, want ssl", target.transport)
+	}
+}
+
+func TestConnectionFormSSHTarget(t *testing.T) {
+	form := newConnectionForm()
+	form.selectProtocol(2)
+	form.username.set("alice")
+	form.password.set("secret")
+	form.host.set("server.example.com")
+	form.display.set("100")
+
+	target, err := form.target()
+	if err != nil {
+		t.Fatalf("target: %v", err)
+	}
+	if target.transport != transportSSH {
+		t.Errorf("transport = %q, want ssh", target.transport)
+	}
+	if target.address != "server.example.com:22" {
+		t.Errorf("address = %q, want server.example.com:22", target.address)
+	}
+	if target.display != "100" {
+		t.Errorf("display = %q, want 100", target.display)
+	}
+	if target.username != "alice" || target.password != "secret" {
+		t.Errorf("credentials = %q/%q, want alice/secret", target.username, target.password)
 	}
 }
 
@@ -85,6 +119,32 @@ func TestConnectionFormTargetValidation(t *testing.T) {
 				t.Errorf("error = %q, want it to contain %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestConnectionFormRejectsInvalidSSHDisplay(t *testing.T) {
+	form := newConnectionForm()
+	form.selectProtocol(2)
+	form.host.set("example.com")
+	form.display.set("100/child")
+	if _, err := form.target(); err == nil || !strings.Contains(err.Error(), "single path segment") {
+		t.Fatalf("target error = %v, want display validation error", err)
+	}
+}
+
+func TestConnectionFormSkipsDisplayForTCP(t *testing.T) {
+	form := newConnectionForm()
+	form.focus = focusPort
+	form.key(ui.Key{Name: "Tab", Pressed: true})
+	if form.focus != focusCancel {
+		t.Errorf("focus = %d, want cancel (%d)", form.focus, focusCancel)
+	}
+
+	form.selectProtocol(2)
+	form.focus = focusPort
+	form.key(ui.Key{Name: "Tab", Pressed: true})
+	if form.focus != focusDisplay {
+		t.Errorf("SSH focus = %d, want display (%d)", form.focus, focusDisplay)
 	}
 }
 

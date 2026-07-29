@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/image/font"
@@ -19,13 +20,14 @@ import (
 
 const (
 	dialogWidth  = 520
-	dialogHeight = 390
+	dialogHeight = 440
 
 	focusProtocol = iota
 	focusUsername
 	focusPassword
 	focusHost
 	focusPort
+	focusDisplay
 	focusCancel
 	focusConnect
 	focusCount
@@ -34,12 +36,13 @@ const (
 type dialogProtocol struct {
 	name        string
 	defaultPort string
-	secure      bool
+	transport   connectionTransport
 }
 
 var dialogProtocols = []dialogProtocol{
-	{name: "tcp", defaultPort: defaultTCPPort},
-	{name: "ssl", defaultPort: defaultTCPPort, secure: true},
+	{name: "tcp", defaultPort: defaultTCPPort, transport: transportTCP},
+	{name: "ssl", defaultPort: defaultTCPPort, transport: transportSSL},
+	{name: "ssh", defaultPort: defaultSSHPort, transport: transportSSH},
 }
 
 type textInput struct {
@@ -88,6 +91,7 @@ type connectionForm struct {
 	password textInput
 	host     textInput
 	port     textInput
+	display  textInput
 
 	focus        int
 	dropdownOpen bool
@@ -128,9 +132,18 @@ func (f *connectionForm) inputForFocus() *textInput {
 		return &f.host
 	case focusPort:
 		return &f.port
+	case focusDisplay:
+		if f.sshSelected() {
+			return &f.display
+		}
+		return nil
 	default:
 		return nil
 	}
+}
+
+func (f *connectionForm) sshSelected() bool {
+	return dialogProtocols[f.protocol].transport == transportSSH
 }
 
 func (f *connectionForm) target() (connectionURL, error) {
@@ -149,12 +162,24 @@ func (f *connectionForm) target() (connectionURL, error) {
 	}
 	port = strconv.FormatUint(number, 10)
 	protocol := dialogProtocols[f.protocol]
+	if protocol.transport == transportSSH && strings.HasPrefix(host, "-") {
+		return connectionURL{}, fmt.Errorf("Host cannot begin with -")
+	}
+	display := ""
+	if protocol.transport == transportSSH {
+		display = strings.TrimSpace(f.display.string())
+		if strings.Contains(display, "/") || strings.IndexFunc(display, unicode.IsControl) >= 0 {
+			return connectionURL{}, fmt.Errorf("Display must be a single path segment")
+		}
+	}
 	return connectionURL{
+		transport:  protocol.transport,
 		address:    net.JoinHostPort(host, port),
 		serverName: host,
+		port:       port,
+		display:    display,
 		username:   f.username.string(),
 		password:   f.password.string(),
-		secure:     protocol.secure,
 	}, nil
 }
 
@@ -168,7 +193,7 @@ func (r dialogRect) contains(x, y int) bool {
 
 type dialogLayout struct {
 	protocol dialogRect
-	inputs   [4]dialogRect
+	inputs   [5]dialogRect
 	cancel   dialogRect
 	connect  dialogRect
 }
@@ -177,14 +202,15 @@ func (f *connectionForm) layout() dialogLayout {
 	width := max(f.width, 360)
 	controlX := min(145, width/3)
 	controlWidth := max(width-controlX-24, 170)
-	buttonY := max(f.height-56, 315)
+	buttonY := max(f.height-56, 365)
 	return dialogLayout{
 		protocol: dialogRect{x: controlX, y: 38, width: min(controlWidth, 180), height: 34},
-		inputs: [4]dialogRect{
+		inputs: [5]dialogRect{
 			{x: controlX, y: 88, width: controlWidth, height: 34},
 			{x: controlX, y: 138, width: controlWidth, height: 34},
 			{x: controlX, y: 188, width: controlWidth, height: 34},
 			{x: controlX, y: 238, width: min(controlWidth, 180), height: 34},
+			{x: controlX, y: 288, width: controlWidth, height: 34},
 		},
 		cancel:  dialogRect{x: max(width-238, 122), y: buttonY, width: 100, height: 34},
 		connect: dialogRect{x: max(width-124, 236), y: buttonY, width: 100, height: 34},
@@ -297,7 +323,11 @@ func (f *connectionForm) click(x, y int) int {
 		f.dropdownOpen = !f.dropdownOpen
 		return -1
 	}
-	for index, field := range layout.inputs {
+	inputCount := 4
+	if f.sshSelected() {
+		inputCount = len(layout.inputs)
+	}
+	for index, field := range layout.inputs[:inputCount] {
 		if field.contains(x, y) {
 			f.focus = focusUsername + index
 			f.dropdownOpen = false
@@ -328,7 +358,12 @@ func (f *connectionForm) key(event ui.Key) int {
 		if event.Name == "ISO_Left_Tab" || hasModifier(event.Modifiers, "shift") {
 			direction = -1
 		}
-		f.focus = (f.focus + direction + focusCount) % focusCount
+		for {
+			f.focus = (f.focus + direction + focusCount) % focusCount
+			if f.focus != focusDisplay || f.sshSelected() {
+				break
+			}
+		}
 		f.dropdownOpen = false
 		return -1
 	case "Return", "KP_Enter":
@@ -445,6 +480,13 @@ func paintConnectionForm(window ui.Window, form *connectionForm) error {
 		{"Host", layout.inputs[2].y},
 		{"Port", layout.inputs[3].y},
 	}
+	if form.sshSelected() {
+		labels[2].text = "SSH Password"
+		labels = append(labels, struct {
+			text string
+			y    int
+		}{"Display", layout.inputs[4].y})
+	}
 	for _, label := range labels {
 		drawText(canvas, 24, label.y+22, label.text, dialogColors.text)
 	}
@@ -456,6 +498,9 @@ func paintConnectionForm(window ui.Window, form *connectionForm) error {
 	drawText(canvas, arrowX, layout.protocol.y+21, "v", dialogColors.muted)
 
 	inputs := []*textInput{&form.username, &form.password, &form.host, &form.port}
+	if form.sshSelected() {
+		inputs = append(inputs, &form.display)
+	}
 	for index, input := range inputs {
 		field := layout.inputs[index]
 		focused := form.focus == focusUsername+index
@@ -466,7 +511,7 @@ func paintConnectionForm(window ui.Window, form *connectionForm) error {
 	drawButton(canvas, layout.cancel, "Cancel", form.focus == focusCancel, false)
 	drawButton(canvas, layout.connect, "Connect", form.focus == focusConnect, true)
 	if form.message != "" {
-		drawText(canvas, 24, max(layout.cancel.y-18, 292), form.message, dialogColors.error)
+		drawText(canvas, 24, max(layout.cancel.y-18, 342), form.message, dialogColors.error)
 	}
 
 	// Draw the open menu last so it sits over the fields below it.

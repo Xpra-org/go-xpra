@@ -4,8 +4,8 @@
 
 # go-xpra
 
-A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP or TLS and
-shows the forwarded windows on the local desktop — X11 or Wayland on Linux, Win32 on Windows.
+A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP, TLS or SSH
+and shows the forwarded windows on the local desktop — X11 or Wayland on Linux, Win32 on Windows.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -27,25 +27,44 @@ Building it under MSYS2 needs the toolchain's own `go.exe` first on `PATH`. The 
 export PATH=$MINGW_PREFIX/lib/go/bin:$PATH
 ```
 
-Connection URLs use Xpra's standard `(tcp|ssl)://[username[:password]@]host[:port]/` form. The
-port defaults to 14500. `ssl://` verifies the server certificate and hostname against the system
-trust store. Add a private CA without replacing the system roots:
+TCP and TLS connection URLs use Xpra's standard
+`(tcp|ssl)://[username[:password]@]host[:port]/` form. The port defaults to 14500. `ssl://`
+verifies the server certificate and hostname against the system trust store. Add a private CA
+without replacing the system roots:
 
 ```shell
 ./go-xpra --ssl-ca-cert /path/to/ca.pem ssl://server.example.com/
 ```
 
+SSH connections use `ssh://[username[:password]@]host[:port]/[display]`, default to port 22, and
+run `xpra _proxy [display]` on the remote host:
+
+```shell
+./go-xpra ssh://alice@server.example.com/100
+```
+
+The display may be omitted when that account has only one active Xpra session. SSH is provided by
+the system `ssh` executable, so host keys, identities, agents, jump hosts and other settings come
+from the normal OpenSSH configuration. The remote host must have `xpra` in its `PATH`. OpenSSH
+reads interactive host-key and password prompts from its controlling terminal because stdin
+carries the Xpra protocol; agent or key authentication is the reliable choice for GUI launches.
+An SSH password included in the URL is passed to `sshpass` through its `SSHPASS` environment
+variable rather than copying it into the spawned `sshpass` or `ssh` arguments. Supplying one
+therefore requires `sshpass` in `PATH`.
+
 Running `./go-xpra` without any arguments opens a connection dialog instead. It offers the
-supported `tcp` and `ssl` protocols and optional user name and password fields, and fills in the
-protocol's default port automatically.
+supported `tcp`, `ssl` and `ssh` protocols and fills in the protocol's default port automatically.
+SSH also exposes an optional display field. Its password field is the SSH login password; for
+TCP and TLS the field is the Xpra protocol password.
 
 `--ssl-insecure` disables certificate and hostname verification for local testing and logs a
 warning; it cannot be combined with `--ssl-ca-cert`. SSL options are rejected with `tcp://` URLs.
-Credentials can be included in either URL. An omitted user name falls back to `USER` (or
-`USERNAME` on Windows). When an authenticated server challenges a connection with no password,
-the client first checks `XPRA_PASSWORD`, then uses `pinentry` on Linux with a hidden terminal
-prompt as its fallback, or the native Windows credentials dialog. Pass `-v` to log every window
-event and unhandled packet type.
+They are also rejected with `ssh://` URLs. Credentials can be included in any supported URL. An
+omitted user name falls back to `USER` (or `USERNAME` on Windows). When an authenticated Xpra
+server challenges a connection with no Xpra password, the client first checks `XPRA_PASSWORD`,
+then uses `pinentry` on Linux with a hidden terminal prompt as its fallback, or the native Windows
+credentials dialog. An SSH URL password is consumed by SSH and is not reused for this protocol
+challenge. Pass `-v` to log every window event and unhandled packet type.
 
 On Linux, `--backend` picks between the two backends and defaults to `auto`, which uses X11 when
 `$DISPLAY` is set and Wayland otherwise. X11 wins on purpose: a session running XWayland is still
@@ -55,7 +74,8 @@ Pass `--backend wayland` to use the compositor directly anyway.
 
 ## What it does
 
-- plain TCP and TLS transports, `rencodeplus` packet encoding, inbound `lz4` decompression
+- plain TCP, TLS and SSH-subprocess transports, `rencodeplus` packet encoding, inbound `lz4`
+  decompression
 - password authentication (the `hmac+sha256` challenge)
 - window create, destroy, move/resize, raise, minimize/restore, title changes, and
   override-redirect popups
@@ -75,8 +95,8 @@ Pass `--backend wayland` to use the compositor directly anyway.
 ## What it does not do
 
 Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
-audio, native notification popups, system tray, keymap upload, and the
-`ws`/`wss`/`ssh` transports. Linux and Windows only — no macOS.
+audio, native notification popups, system tray, keymap upload, and the `ws`/`wss` transports.
+Linux and Windows only — no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
 nothing to leave out.
@@ -109,7 +129,7 @@ compositor hands over its whole keymap, so every layout names its keys correctly
 | `win32` | the window thread, forwarded windows, and RGB painting — Windows |
 | `cmd/go-xpra` | the command line entry point |
 
-Four goroutines: one reads packets from the socket, one writes them, one belongs to the local
+Four goroutines: one reads packets from the connection stream, one writes them, one belongs to the local
 desktop — reading X events, dispatching Wayland ones, or owning the Windows windows and their
 message loop — and the main one owns all client state and is the only writer to either. The two
 backends that cannot let their desktop goroutine block on a slow client put a coalescing queue in
@@ -182,6 +202,13 @@ input path can be run end to end with nothing but Go.
 ```shell
 go run ./internal/mockserver &
 go run ./cmd/go-xpra tcp://127.0.0.1:14500/
+```
+
+SSH can be checked against the same server-side session without opening a TCP listener:
+
+```shell
+xpra start :100 --start=xterm
+go run ./cmd/go-xpra ssh://localhost/100
 ```
 
 [internal/README.md](internal/README.md) says what should appear on screen, what it means when it
