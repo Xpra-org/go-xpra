@@ -25,15 +25,16 @@ is wrong:
 | a content area of exactly 400x300 | the window frame is being counted as part of the geometry |
 
 The server logs every packet the client sends back, which is the other half of the test: moving the
-pointer, clicking, scrolling and typing should produce `pointer`, `pointer-button` and `key-action`
+pointer, clicking, scrolling and typing should produce `pointer-motion`, `pointer-button` and
+`keyboard-event`
 packets with screen coordinates, X11 button numbers and X11 keysym names. Closing the window should
-produce `close-window`, after which the server destroys the window and disconnects, so the client's
+produce `window-close`, after which the server destroys the window and disconnects, so the client's
 whole lifecycle runs end to end.
 
 One line is worth reading closely:
 
 ```
-<- damage-sequence 1 wid=1 400x300 decode=1us ""
+<- window-draw-ack 1 wid=1 400x300 decode=1us ""
 ```
 
 The decode time must never be zero. xpra reads a zero as a failed paint, so a client that reports

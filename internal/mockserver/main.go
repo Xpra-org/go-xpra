@@ -85,8 +85,13 @@ func serve(conn *protocol.Conn) {
 		case "window-draw-ack":
 			// The client must never report a decode time of zero: xpra reads
 			// that as a failed paint, so it is worth seeing in the log.
+			sequenceIndex, widIndex, widthIndex, heightIndex := 4, 1, 2, 3
+			if protocol.BackwardsCompatible {
+				sequenceIndex, widIndex, widthIndex, heightIndex = 1, 2, 3, 4
+			}
 			log.Printf("<- window-draw-ack %d wid=%d %dx%d decode=%dus %q",
-				packet.Int(1), packet.Int(2), packet.Int(3), packet.Int(4),
+				packet.Int(sequenceIndex), packet.Int(widIndex),
+				packet.Int(widthIndex), packet.Int(heightIndex),
 				packet.Int(5), packet.Str(6))
 
 		case "window-close":

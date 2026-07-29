@@ -78,6 +78,7 @@ func receiveOutbound(t *testing.T, conn *protocol.Conn, wantType string) protoco
 }
 
 func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	client, server, window := outboundHarness(t)
 
 	if err := client.sendHello("", nil); err != nil {
@@ -138,7 +139,8 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 		map[string]any{"rgb_format": "BGRX"},
 	})
 	drawAck := receiveOutbound(t, server, "window-draw-ack")
-	if drawAck.Int(1) != 42 || drawAck.Int(2) != 7 || drawAck.Int(5) <= 0 {
+	if drawAck.Int(1) != 42 || drawAck.Int(2) != 7 ||
+		drawAck.Int(3) != 1 || drawAck.Int(4) != 1 || drawAck.Int(5) <= 0 {
 		t.Errorf("window-draw-ack is wrong: %v", drawAck)
 	}
 
@@ -147,4 +149,22 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 
 	client.handlePing(protocol.Packet{"ping", int64(123), int64(0), "session"})
 	receiveOutbound(t, server, "ping_echo")
+}
+
+func TestWindowDrawAckUsesTrunkShapeWithoutCompatibility(t *testing.T) {
+	setBackwardsCompatible(t, false)
+	client, server, window := outboundHarness(t)
+	client.windows[7] = window
+
+	client.handleDraw(protocol.Packet{
+		"window-draw", int64(7), int64(0), int64(0), int64(3), int64(2),
+		"rgb32", make([]byte, 24), int64(42), int64(12),
+		map[string]any{"rgb_format": "BGRX"},
+	})
+
+	drawAck := receiveOutbound(t, server, "window-draw-ack")
+	if drawAck.Int(1) != 7 || drawAck.Int(2) != 3 || drawAck.Int(3) != 2 ||
+		drawAck.Int(4) != 42 || drawAck.Int(5) <= 0 || drawAck.Str(6) != "" {
+		t.Errorf("strict window-draw-ack has the wrong shape: %v", drawAck)
+	}
 }

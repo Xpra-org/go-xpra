@@ -576,7 +576,14 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 	options := packet.Dict(10)
 
 	ack := func(decodeTime int64, message string) {
-		c.send("window-draw-ack", sequence, wid, width, height, decodeTime, message)
+		if protocol.BackwardsCompatible {
+			// Xpra 6.5.x puts the packet sequence before the window id.
+			c.send("window-draw-ack", sequence, wid, width, height, decodeTime, message)
+		} else {
+			// Trunk puts the window fields first, consistent with other
+			// window packet types (Xpra commit 4e35bb1b6d).
+			c.send("window-draw-ack", wid, width, height, sequence, decodeTime, message)
+		}
 	}
 
 	window, ok := c.windows[wid]
