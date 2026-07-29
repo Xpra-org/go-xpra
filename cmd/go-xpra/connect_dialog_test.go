@@ -33,6 +33,22 @@ func TestConnectionFormProtocolChangePopulatesDefaultPort(t *testing.T) {
 	}
 
 	form.selectProtocol(2)
+	if got := dialogProtocols[form.protocol].name; got != "ws" {
+		t.Errorf("protocol = %q, want ws", got)
+	}
+	if got := form.port.string(); got != defaultWSPort {
+		t.Errorf("port = %q, want WS default %q", got, defaultWSPort)
+	}
+
+	form.selectProtocol(3)
+	if got := dialogProtocols[form.protocol].name; got != "wss" {
+		t.Errorf("protocol = %q, want wss", got)
+	}
+	if got := form.port.string(); got != defaultWSSPort {
+		t.Errorf("port = %q, want WSS default %q", got, defaultWSSPort)
+	}
+
+	form.selectProtocol(4)
 	if got := dialogProtocols[form.protocol].name; got != "ssh" {
 		t.Errorf("protocol = %q, want ssh", got)
 	}
@@ -69,7 +85,7 @@ func TestConnectionFormTarget(t *testing.T) {
 
 func TestConnectionFormSSHTarget(t *testing.T) {
 	form := newConnectionForm()
-	form.selectProtocol(2)
+	form.selectProtocol(4)
 	form.username.set("alice")
 	form.password.set("secret")
 	form.host.set("server.example.com")
@@ -87,6 +103,33 @@ func TestConnectionFormSSHTarget(t *testing.T) {
 	}
 	if target.display != "100" {
 		t.Errorf("display = %q, want 100", target.display)
+	}
+	if target.username != "alice" || target.password != "secret" {
+		t.Errorf("credentials = %q/%q, want alice/secret", target.username, target.password)
+	}
+}
+
+func TestConnectionFormWebSocketTarget(t *testing.T) {
+	form := newConnectionForm()
+	form.selectProtocol(3)
+	form.username.set("alice")
+	form.password.set("secret")
+	form.host.set("server.example.com")
+	form.path.set("xpra/session?token=abc%20123")
+
+	target, err := form.target()
+	if err != nil {
+		t.Fatalf("target: %v", err)
+	}
+	if target.transport != transportWSS {
+		t.Errorf("transport = %q, want wss", target.transport)
+	}
+	if target.address != "server.example.com:443" {
+		t.Errorf("address = %q, want server.example.com:443", target.address)
+	}
+	if target.path != "/xpra/session" || target.rawQuery != "token=abc%20123" {
+		t.Errorf("endpoint = %q?%s, want /xpra/session?token=abc%%20123",
+			target.path, target.rawQuery)
 	}
 	if target.username != "alice" || target.password != "secret" {
 		t.Errorf("credentials = %q/%q, want alice/secret", target.username, target.password)
@@ -124,11 +167,21 @@ func TestConnectionFormTargetValidation(t *testing.T) {
 
 func TestConnectionFormRejectsInvalidSSHDisplay(t *testing.T) {
 	form := newConnectionForm()
-	form.selectProtocol(2)
+	form.selectProtocol(4)
 	form.host.set("example.com")
 	form.display.set("100/child")
 	if _, err := form.target(); err == nil || !strings.Contains(err.Error(), "single path segment") {
 		t.Fatalf("target error = %v, want display validation error", err)
+	}
+}
+
+func TestConnectionFormRejectsInvalidWebSocketPath(t *testing.T) {
+	form := newConnectionForm()
+	form.selectProtocol(2)
+	form.host.set("example.com")
+	form.path.set("//other.example.com/xpra")
+	if _, err := form.target(); err == nil || !strings.Contains(err.Error(), "WebSocket URL path") {
+		t.Fatalf("target error = %v, want path validation error", err)
 	}
 }
 
@@ -141,6 +194,13 @@ func TestConnectionFormSkipsDisplayForTCP(t *testing.T) {
 	}
 
 	form.selectProtocol(2)
+	form.focus = focusPort
+	form.key(ui.Key{Name: "Tab", Pressed: true})
+	if form.focus != focusDisplay {
+		t.Errorf("WS focus = %d, want path (%d)", form.focus, focusDisplay)
+	}
+
+	form.selectProtocol(4)
 	form.focus = focusPort
 	form.key(ui.Key{Name: "Tab", Pressed: true})
 	if form.focus != focusDisplay {

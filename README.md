@@ -4,8 +4,9 @@
 
 # go-xpra
 
-A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP, TLS or SSH
-and shows the forwarded windows on the local desktop — X11 or Wayland on Linux, Win32 on Windows.
+A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP, TLS,
+WebSocket or SSH and shows the forwarded windows on the local desktop — X11 or Wayland on Linux,
+Win32 on Windows.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -36,6 +37,15 @@ without replacing the system roots:
 ./go-xpra --ssl-ca-cert /path/to/ca.pem ssl://server.example.com/
 ```
 
+WebSocket connections use
+`(ws|wss)://[username[:password]@]host[:port]/[path][?query]`. WS defaults to port 80 and WSS
+to 443. The path and query are sent in the HTTP upgrade request, which supports deployments behind
+a reverse proxy:
+
+```shell
+./go-xpra wss://server.example.com/xpra/
+```
+
 SSH connections use `ssh://[username[:password]@]host[:port]/[display]`, default to port 22, and
 run `xpra _proxy [display]` on the remote host:
 
@@ -53,18 +63,20 @@ variable rather than copying it into the spawned `sshpass` or `ssh` arguments. S
 therefore requires `sshpass` in `PATH`.
 
 Running `./go-xpra` without any arguments opens a connection dialog instead. It offers the
-supported `tcp`, `ssl` and `ssh` protocols and fills in the protocol's default port automatically.
-SSH also exposes an optional display field. Its password field is the SSH login password; for
-TCP and TLS the field is the Xpra protocol password.
+supported `tcp`, `ssl`, `ws`, `wss` and `ssh` protocols and fills in the protocol's default port
+automatically. WebSockets expose an endpoint path field, and SSH exposes an optional display
+field. The SSH password field is the SSH login password; for TCP, TLS and WebSockets it is the
+Xpra protocol password.
 
 `--ssl-insecure` disables certificate and hostname verification for local testing and logs a
 warning; it cannot be combined with `--ssl-ca-cert`. SSL options are rejected with `tcp://` URLs.
-They are also rejected with `ssh://` URLs. Credentials can be included in any supported URL. An
-omitted user name falls back to `USER` (or `USERNAME` on Windows). When an authenticated Xpra
-server challenges a connection with no Xpra password, the client first checks `XPRA_PASSWORD`,
-then uses `pinentry` on Linux with a hidden terminal prompt as its fallback, or the native Windows
-credentials dialog. An SSH URL password is consumed by SSH and is not reused for this protocol
-challenge. Pass `-v` to log every window event and unhandled packet type.
+They are also rejected with `ws://` and `ssh://` URLs, and apply to both `ssl://` and `wss://`.
+Credentials can be included in any supported URL. An omitted user name falls back to `USER` (or
+`USERNAME` on Windows). When an authenticated Xpra server challenges a connection with no Xpra
+password, the client first checks `XPRA_PASSWORD`, then uses `pinentry` on Linux with a hidden
+terminal prompt as its fallback, or the native Windows credentials dialog. An SSH URL password is
+consumed by SSH and is not reused for this protocol challenge. Pass `-v` to log every window event
+and unhandled packet type.
 
 Legacy packet reception is enabled by default, matching Xpra itself. Set
 `XPRA_BACKWARDS_COMPATIBLE=0` to accept only the Xpra 6.5+ packet types; outgoing
@@ -78,8 +90,8 @@ Pass `--backend wayland` to use the compositor directly anyway.
 
 ## What it does
 
-- plain TCP, TLS and SSH-subprocess transports, `rencodeplus` packet encoding, inbound `lz4`
-  decompression
+- plain TCP, TLS, WebSocket, secure WebSocket and SSH-subprocess transports, `rencodeplus` packet
+  encoding, inbound `lz4` decompression
 - password authentication (the `hmac+sha256` challenge)
 - window create, destroy, move/resize, raise, minimize/restore, title changes, and
   override-redirect popups
@@ -99,8 +111,8 @@ Pass `--backend wayland` to use the compositor directly anyway.
 ## What it does not do
 
 Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
-audio, native notification popups, system tray, keymap upload, and the `ws`/`wss` transports.
-Linux and Windows only — no macOS.
+audio, native notification popups, system tray, and keymap upload. Linux and Windows only —
+no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
 nothing to leave out.
@@ -193,11 +205,11 @@ resizes a window.
 
 `go test ./...` covers the parts that do not need a server or a display: the `rencodeplus` codec
 against byte-exact vectors captured from xpra's own implementation, packet framing including lz4
-and malformed input, TLS trust and hostname verification against a local certificate, the
-authentication digest against a vector from `xpra.net.digest`, the pixel converters, the event
-queue, keysym naming, and the parser for the XKB keymap a Wayland compositor hands over. Each
-backend's share of that is compiled only for its own platform, so the keyboard is covered on the
-machine the tests run on and CI runs them on both.
+and malformed input, WebSocket framing and subprotocol negotiation, TLS/WSS trust and hostname
+verification against a local certificate, the authentication digest against a vector from
+`xpra.net.digest`, the pixel converters, the event queue, keysym naming, and the parser for the
+XKB keymap a Wayland compositor hands over. Each backend's share of that is compiled only for its
+own platform, so the keyboard is covered on the machine the tests run on and CI runs them on both.
 
 `internal/mockserver` covers the next layer without needing xpra installed at all: it is a fake
 server that forwards one window of known pixels, so the window lifecycle, the paint path and the

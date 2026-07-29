@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"unicode"
@@ -42,6 +43,8 @@ type dialogProtocol struct {
 var dialogProtocols = []dialogProtocol{
 	{name: "tcp", defaultPort: defaultTCPPort, transport: transportTCP},
 	{name: "ssl", defaultPort: defaultTCPPort, transport: transportSSL},
+	{name: "ws", defaultPort: defaultWSPort, transport: transportWS},
+	{name: "wss", defaultPort: defaultWSSPort, transport: transportWSS},
 	{name: "ssh", defaultPort: defaultSSHPort, transport: transportSSH},
 }
 
@@ -92,6 +95,7 @@ type connectionForm struct {
 	host     textInput
 	port     textInput
 	display  textInput
+	path     textInput
 
 	focus        int
 	dropdownOpen bool
@@ -107,6 +111,7 @@ func newConnectionForm() *connectionForm {
 		height: dialogHeight,
 	}
 	f.port.set(dialogProtocols[0].defaultPort)
+	f.path.set("/")
 	return f
 }
 
@@ -136,6 +141,9 @@ func (f *connectionForm) inputForFocus() *textInput {
 		if f.sshSelected() {
 			return &f.display
 		}
+		if f.webSocketSelected() {
+			return &f.path
+		}
 		return nil
 	default:
 		return nil
@@ -144,6 +152,15 @@ func (f *connectionForm) inputForFocus() *textInput {
 
 func (f *connectionForm) sshSelected() bool {
 	return dialogProtocols[f.protocol].transport == transportSSH
+}
+
+func (f *connectionForm) webSocketSelected() bool {
+	transport := dialogProtocols[f.protocol].transport
+	return transport == transportWS || transport == transportWSS
+}
+
+func (f *connectionForm) extraSelected() bool {
+	return f.sshSelected() || f.webSocketSelected()
 }
 
 func (f *connectionForm) target() (connectionURL, error) {
@@ -166,11 +183,31 @@ func (f *connectionForm) target() (connectionURL, error) {
 		return connectionURL{}, fmt.Errorf("Host cannot begin with -")
 	}
 	display := ""
+	path := ""
+	rawPath := ""
+	rawQuery := ""
 	if protocol.transport == transportSSH {
 		display = strings.TrimSpace(f.display.string())
 		if strings.Contains(display, "/") || strings.IndexFunc(display, unicode.IsControl) >= 0 {
 			return connectionURL{}, fmt.Errorf("Display must be a single path segment")
 		}
+	} else if protocol.transport == transportWS || protocol.transport == transportWSS {
+		endpoint := strings.TrimSpace(f.path.string())
+		if endpoint == "" {
+			endpoint = "/"
+		} else if !strings.HasPrefix(endpoint, "/") {
+			endpoint = "/" + endpoint
+		}
+		u, err := url.Parse(endpoint)
+		if err != nil || u.Host != "" || u.Opaque != "" || u.Fragment != "" {
+			return connectionURL{}, fmt.Errorf("Path must be a WebSocket URL path with an optional query")
+		}
+		path = u.Path
+		if path == "" {
+			path = "/"
+		}
+		rawPath = u.RawPath
+		rawQuery = u.RawQuery
 	}
 	return connectionURL{
 		transport:  protocol.transport,
@@ -178,6 +215,9 @@ func (f *connectionForm) target() (connectionURL, error) {
 		serverName: host,
 		port:       port,
 		display:    display,
+		path:       path,
+		rawPath:    rawPath,
+		rawQuery:   rawQuery,
 		username:   f.username.string(),
 		password:   f.password.string(),
 	}, nil
@@ -324,7 +364,7 @@ func (f *connectionForm) click(x, y int) int {
 		return -1
 	}
 	inputCount := 4
-	if f.sshSelected() {
+	if f.extraSelected() {
 		inputCount = len(layout.inputs)
 	}
 	for index, field := range layout.inputs[:inputCount] {
@@ -360,7 +400,7 @@ func (f *connectionForm) key(event ui.Key) int {
 		}
 		for {
 			f.focus = (f.focus + direction + focusCount) % focusCount
-			if f.focus != focusDisplay || f.sshSelected() {
+			if f.focus != focusDisplay || f.extraSelected() {
 				break
 			}
 		}
@@ -486,6 +526,11 @@ func paintConnectionForm(window ui.Window, form *connectionForm) error {
 			text string
 			y    int
 		}{"Display", layout.inputs[4].y})
+	} else if form.webSocketSelected() {
+		labels = append(labels, struct {
+			text string
+			y    int
+		}{"Path", layout.inputs[4].y})
 	}
 	for _, label := range labels {
 		drawText(canvas, 24, label.y+22, label.text, dialogColors.text)
@@ -500,6 +545,8 @@ func paintConnectionForm(window ui.Window, form *connectionForm) error {
 	inputs := []*textInput{&form.username, &form.password, &form.host, &form.port}
 	if form.sshSelected() {
 		inputs = append(inputs, &form.display)
+	} else if form.webSocketSelected() {
+		inputs = append(inputs, &form.path)
 	}
 	for index, input := range inputs {
 		field := layout.inputs[index]

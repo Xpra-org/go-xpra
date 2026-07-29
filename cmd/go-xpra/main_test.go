@@ -90,6 +90,9 @@ func TestParseConnectionURL(t *testing.T) {
 		username   string
 		password   string
 		display    string
+		path       string
+		rawPath    string
+		rawQuery   string
 		port       string
 		transport  connectionTransport
 	}{
@@ -182,6 +185,46 @@ func TestParseConnectionURL(t *testing.T) {
 			transport:  transportSSL,
 		},
 		{
+			name:       "WebSocket with defaults",
+			raw:        "ws://example.com/",
+			address:    "example.com:80",
+			serverName: "example.com",
+			path:       "/",
+			port:       defaultWSPort,
+			transport:  transportWS,
+		},
+		{
+			name:       "WebSocket path query and credentials",
+			raw:        "WS://alice:secret@example.com:8080/xpra%2Fsession?token=abc%20123",
+			address:    "example.com:8080",
+			serverName: "example.com",
+			username:   "alice",
+			password:   "secret",
+			path:       "/xpra/session",
+			rawPath:    "/xpra%2Fsession",
+			rawQuery:   "token=abc%20123",
+			port:       "8080",
+			transport:  transportWS,
+		},
+		{
+			name:       "secure WebSocket with defaults",
+			raw:        "wss://secure.example.com",
+			address:    "secure.example.com:443",
+			serverName: "secure.example.com",
+			path:       "/",
+			port:       defaultWSSPort,
+			transport:  transportWSS,
+		},
+		{
+			name:       "secure WebSocket IPv6",
+			raw:        "wss://[2001:db8::1]:14430/xpra/",
+			address:    "[2001:db8::1]:14430",
+			serverName: "2001:db8::1",
+			path:       "/xpra/",
+			port:       "14430",
+			transport:  transportWSS,
+		},
+		{
 			name:       "SSH with defaults",
 			raw:        "ssh://alice@example.com/",
 			address:    "example.com:22",
@@ -243,6 +286,15 @@ func TestParseConnectionURL(t *testing.T) {
 			if got.display != tt.display {
 				t.Errorf("display = %q, want %q", got.display, tt.display)
 			}
+			if got.path != tt.path {
+				t.Errorf("path = %q, want %q", got.path, tt.path)
+			}
+			if got.rawPath != tt.rawPath {
+				t.Errorf("rawPath = %q, want %q", got.rawPath, tt.rawPath)
+			}
+			if got.rawQuery != tt.rawQuery {
+				t.Errorf("rawQuery = %q, want %q", got.rawQuery, tt.rawQuery)
+			}
 			if got.port != tt.port {
 				t.Errorf("port = %q, want %q", got.port, tt.port)
 			}
@@ -259,7 +311,7 @@ func TestParseConnectionURLRejectsUnsupportedURLs(t *testing.T) {
 		raw  string
 	}{
 		{name: "bare address", raw: "example.com:14500"},
-		{name: "WebSocket", raw: "ws://example.com/"},
+		{name: "unsupported protocol", raw: "quic://example.com/"},
 		{name: "missing host", raw: "tcp:///"},
 		{name: "display path", raw: "tcp://example.com/100"},
 		{name: "SSH multiple path segments", raw: "ssh://example.com/100/child"},
@@ -293,6 +345,20 @@ func TestParseConnectionURLErrorsDoNotExposePassword(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), password) {
 		t.Errorf("error exposes password: %v", err)
+	}
+}
+
+func TestWebSocketURLDoesNotExposeCredentials(t *testing.T) {
+	target, err := parseConnectionURL("wss://alice:top-secret@example.com/xpra/?token=abc")
+	if err != nil {
+		t.Fatalf("parseConnectionURL: %v", err)
+	}
+	got := target.webSocketURL()
+	if strings.Contains(got, "alice") || strings.Contains(got, "top-secret") {
+		t.Errorf("WebSocket URL exposes credentials: %q", got)
+	}
+	if got != "wss://example.com:443/xpra/?token=abc" {
+		t.Errorf("WebSocket URL = %q", got)
 	}
 }
 
@@ -344,6 +410,17 @@ func TestMakeTLSConfig(t *testing.T) {
 			t.Error("custom CA pool contains no subjects")
 		}
 	})
+
+	t.Run("secure WebSocket", func(t *testing.T) {
+		target.transport = transportWSS
+		config, err := makeTLSConfig(target, sslOptions{})
+		if err != nil {
+			t.Fatalf("makeTLSConfig: %v", err)
+		}
+		if config.ServerName != "example.com" {
+			t.Errorf("ServerName = %q, want example.com", config.ServerName)
+		}
+	})
 }
 
 func testCAPEM(t *testing.T) []byte {
@@ -371,6 +448,7 @@ func TestMakeTLSConfigRejectsInvalidOptions(t *testing.T) {
 	secure := connectionURL{transport: transportSSL, serverName: "example.com"}
 	plain := connectionURL{transport: transportTCP, serverName: "example.com"}
 	ssh := connectionURL{transport: transportSSH, serverName: "example.com"}
+	ws := connectionURL{transport: transportWS, serverName: "example.com"}
 
 	tests := []struct {
 		name    string
@@ -379,6 +457,7 @@ func TestMakeTLSConfigRejectsInvalidOptions(t *testing.T) {
 	}{
 		{name: "SSL option with TCP", target: plain, options: sslOptions{insecure: true}},
 		{name: "SSL option with SSH", target: ssh, options: sslOptions{insecure: true}},
+		{name: "SSL option with WS", target: ws, options: sslOptions{insecure: true}},
 		{name: "conflicting SSL options", target: secure, options: sslOptions{caCert: "ca.pem", insecure: true}},
 		{name: "missing CA file", target: secure, options: sslOptions{caCert: filepath.Join(t.TempDir(), "missing.pem")}},
 	}
