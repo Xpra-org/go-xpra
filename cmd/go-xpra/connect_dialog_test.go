@@ -199,11 +199,12 @@ func (w *dialogTestWindow) ID() ui.WindowID { return w.id }
 func (w *dialogTestWindow) Geometry() (int, int, int, int) {
 	return w.x, w.y, w.width, w.height
 }
-func (w *dialogTestWindow) SetTitle(title string) { w.title = title }
-func (w *dialogTestWindow) Map()                  { w.mapped = true }
-func (w *dialogTestWindow) Raise()                { w.raised = true }
-func (w *dialogTestWindow) Minimize(bool)         {}
-func (w *dialogTestWindow) Destroy()              { w.destroyed = true }
+func (w *dialogTestWindow) SetTitle(title string)  { w.title = title }
+func (w *dialogTestWindow) SetIcon(*ui.Icon) error { return nil }
+func (w *dialogTestWindow) Map()                   { w.mapped = true }
+func (w *dialogTestWindow) Raise()                 { w.raised = true }
+func (w *dialogTestWindow) Minimize(bool)          {}
+func (w *dialogTestWindow) Destroy()               { w.destroyed = true }
 func (w *dialogTestWindow) MoveResize(x, y, width, height int) error {
 	w.x, w.y, w.width, w.height = x, y, width, height
 	return nil

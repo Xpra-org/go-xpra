@@ -116,9 +116,10 @@ func buildHello(username string) rencodeplus.Dict {
 			{Key: "rgb_formats", Value: []string{"BGRX", "BGRA"}},
 			{Key: "transparency", Value: false},
 
-			// An empty list means "no window icon encodings", so the server
-			// sends no window-icon packets.
-			{Key: "window-icon", Value: []string{}},
+			// Window icons arrive in their own packet family. Advertising only
+			// PNG makes the server scale and normalize every source icon before
+			// sending it.
+			{Key: "window-icon", Value: []string{"png"}},
 		}},
 
 		// Restrict window metadata to what we actually apply. Omitting this

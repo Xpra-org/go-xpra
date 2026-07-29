@@ -148,6 +148,10 @@ func TestBuildHello(t *testing.T) {
 			t.Errorf("encoding.%s is missing", key)
 		}
 	}
+	iconEncodings, _ := encoding["window-icon"].([]any)
+	if len(iconEncodings) != 1 || iconEncodings[0] != "png" {
+		t.Errorf("window icon encodings = %v, want [png]", iconEncodings)
+	}
 	core, _ := encoding["core"].([]any)
 	for _, want := range []string{"rgb24", "rgb32", "jpeg", "png", "png/P", "png/L", "webp"} {
 		found := false

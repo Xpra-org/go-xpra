@@ -62,6 +62,8 @@ Pass `--backend wayland` to use the compositor directly anyway.
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
 - pointer, keyboard and focus forwarding, with keys named the X11 way on every platform
 - server-provided PNG pointer cursors, including hotspot changes and default-cursor resets
+- server-provided per-window PNG icons on X11 and Windows, and on Wayland compositors supporting
+  `xdg-toplevel-icon-v1`
 - native Wayland windows through `xdg-shell` and `wl_shm`, with menus as real `xdg_popup`s and
   window frames from `xdg-decoration`
 - forwarded application bells using the native X11 or Win32 sound
@@ -73,7 +75,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
 ## What it does not do
 
 Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
-audio, window icons, native notification popups, system tray, keymap upload, and the
+audio, native notification popups, system tray, keymap upload, and the
 `ws`/`wss`/`ssh` transports. Linux and Windows only — no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs

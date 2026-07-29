@@ -32,6 +32,9 @@ type Window struct {
 
 	x, y, width, height int
 	overrideRedirect    bool
+
+	// icon is owned by this process and only touched on the window thread.
+	icon syscall.Handle
 }
 
 var _ ui.Window = (*Window)(nil)
@@ -144,6 +147,30 @@ func (w *Window) SetTitle(title string) {
 		return
 	}
 	w.d.post(func() { setWindowText(w.hwnd, text) })
+}
+
+// SetIcon replaces both the title-bar and task-switcher icons.
+func (w *Window) SetIcon(image *ui.Icon) error {
+	var iconErr error
+	if err := w.d.call(func() {
+		var next syscall.Handle
+		if image != nil {
+			next, iconErr = createNativeIcon(image)
+			if iconErr != nil {
+				return
+			}
+		}
+		sendMessage(w.hwnd, wmSetIcon, iconSmall, uintptr(next))
+		sendMessage(w.hwnd, wmSetIcon, iconBig, uintptr(next))
+		old := w.icon
+		w.icon = next
+		if old != 0 {
+			destroyIcon(old)
+		}
+	}); err != nil {
+		return err
+	}
+	return iconErr
 }
 
 // Map shows the window.

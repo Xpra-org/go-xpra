@@ -356,6 +356,10 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 		return 0
 
 	case wmDestroy:
+		if w.icon != 0 {
+			destroyIcon(w.icon)
+			w.icon = 0
+		}
 		delete(d.windows, w.hwnd)
 		return 0
 

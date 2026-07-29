@@ -116,6 +116,41 @@ func (w *Window) SetTitle(title string) {
 	icccm.WmNameSet(w.d.X, w.win.Id, title)
 }
 
+// SetIcon publishes the icon through the EWMH _NET_WM_ICON property.
+func (w *Window) SetIcon(icon *ui.Icon) error {
+	if icon == nil {
+		return ewmh.WmIconSet(w.d.X, w.win.Id, nil)
+	}
+	native, err := netWMIcon(icon)
+	if err != nil {
+		return err
+	}
+	return ewmh.WmIconSet(w.d.X, w.win.Id, []ewmh.WmIcon{native})
+}
+
+func netWMIcon(icon *ui.Icon) (ewmh.WmIcon, error) {
+	if err := icon.Validate(); err != nil {
+		return ewmh.WmIcon{}, err
+	}
+	data := make([]uint, icon.Width*icon.Height)
+	for pixel := range data {
+		i := pixel * ui.BytesPerPixel
+		b, g, r, a := icon.Pixels[i], icon.Pixels[i+1], icon.Pixels[i+2], icon.Pixels[i+3]
+		// Go's image.Image RGBA values, and therefore ui.Icon, are alpha
+		// premultiplied. EWMH stores straight ARGB channel values.
+		if a != 0 && a != 0xff {
+			unpremultiply := func(c byte) byte {
+				return byte(min(uint32(c)*0xff/uint32(a), 0xff))
+			}
+			b, g, r = unpremultiply(b), unpremultiply(g), unpremultiply(r)
+		}
+		data[pixel] = uint(a)<<24 | uint(r)<<16 | uint(g)<<8 | uint(b)
+	}
+	return ewmh.WmIcon{
+		Width: uint(icon.Width), Height: uint(icon.Height), Data: data,
+	}, nil
+}
+
 // Map shows the window.
 func (w *Window) Map() { w.win.Map() }
 

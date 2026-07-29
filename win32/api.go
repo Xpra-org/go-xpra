@@ -26,6 +26,7 @@ var (
 	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
 	procDestroyWindow    = user32.NewProc("DestroyWindow")
 	procDefWindowProc    = user32.NewProc("DefWindowProcW")
+	procSendMessage      = user32.NewProc("SendMessageW")
 	procGetMessage       = user32.NewProc("GetMessageW")
 	procDispatchMessage  = user32.NewProc("DispatchMessageW")
 	procPostMessage      = user32.NewProc("PostMessageW")
@@ -42,6 +43,7 @@ var (
 	procLoadCursor       = user32.NewProc("LoadCursorW")
 	procSetCursor        = user32.NewProc("SetCursor")
 	procCreateIcon       = user32.NewProc("CreateIconIndirect")
+	procDestroyIcon      = user32.NewProc("DestroyIcon")
 	procDestroyCursor    = user32.NewProc("DestroyCursor")
 	procGetCursorPos     = user32.NewProc("GetCursorPos")
 	procWindowFromPoint  = user32.NewProc("WindowFromPoint")
@@ -96,6 +98,7 @@ const (
 	wmSetCursor        = 0x0020
 	wmWindowPosChanged = 0x0047
 	wmPrintClient      = 0x0318
+	wmSetIcon          = 0x0080
 	wmKeyDown          = 0x0100
 	wmKeyUp            = 0x0101
 	wmSysKeyDown       = 0x0104
@@ -114,6 +117,9 @@ const (
 	wmApp              = 0x8000
 
 	htClient = 1
+
+	iconSmall = 0
+	iconBig   = 1
 )
 
 // Bitmap and keyboard constants.
@@ -264,6 +270,11 @@ func defWindowProc(hwnd syscall.Handle, message uint32, wparam, lparam uintptr) 
 	return r
 }
 
+func sendMessage(hwnd syscall.Handle, message uint32, wparam, lparam uintptr) uintptr {
+	r, _, _ := procSendMessage.Call(uintptr(hwnd), uintptr(message), wparam, lparam)
+	return r
+}
+
 // getMessage returns false when the loop should end, which is either WM_QUIT or
 // an error we can do nothing about anyway.
 func getMessage(m *msg) bool {
@@ -367,6 +378,10 @@ func createIconIndirect(info *iconInfo) (syscall.Handle, error) {
 
 func destroyCursor(cursor syscall.Handle) {
 	procDestroyCursor.Call(uintptr(cursor))
+}
+
+func destroyIcon(icon syscall.Handle) {
+	procDestroyIcon.Call(uintptr(icon))
 }
 
 func deleteObject(object syscall.Handle) {

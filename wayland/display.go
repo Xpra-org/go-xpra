@@ -39,6 +39,7 @@ const (
 	// popup or suspends a toplevel.
 	wmBaseVersion     = 1
 	decorationVersion = 1
+	iconVersion       = 1
 )
 
 // Display is a connection to the Wayland compositor and the globals the windows
@@ -51,15 +52,16 @@ const (
 // is serialized on mu. Only the blocking read itself is left outside it, which
 // is what lets a request go out while we are waiting to be told something.
 type Display struct {
-	ctx        *client.Context
-	display    *client.Display
-	registry   *client.Registry
-	compositor *client.Compositor
-	shm        *client.Shm
-	wmBase     *xdg_shell.WmBase
-	seat       *client.Seat
-	pointer    *client.Pointer
-	keyboard   *client.Keyboard
+	ctx         *client.Context
+	display     *client.Display
+	registry    *client.Registry
+	compositor  *client.Compositor
+	shm         *client.Shm
+	wmBase      *xdg_shell.WmBase
+	iconManager *toplevelIconManager
+	seat        *client.Seat
+	pointer     *client.Pointer
+	keyboard    *client.Keyboard
 
 	// decoration is nil on a compositor that draws no window frames — GNOME and
 	// weston both — in which case the windows have no title bar.
@@ -214,6 +216,9 @@ func (d *Display) global(e client.RegistryGlobalEvent) {
 	case "zxdg_decoration_manager_v1":
 		d.decoration = xdg_decoration.NewDecorationManager(d.ctx)
 		d.bind(e, d.decoration, decorationVersion)
+	case "xdg_toplevel_icon_manager_v1":
+		d.iconManager = newToplevelIconManager(d.ctx)
+		d.bind(e, d.iconManager, iconVersion)
 	case "wl_seat":
 		if d.seat != nil {
 			// One seat is all a client showing one session can use; a second

@@ -185,6 +185,8 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleRaiseWindow(packet)
 	case "window-bell":
 		c.handleBell(packet)
+	case "window-icon":
+		c.handleWindowIcon(packet)
 	case "window-draw":
 		c.handleDraw(packet)
 
@@ -475,6 +477,47 @@ func (c *Client) handleRaiseWindow(packet protocol.Packet) {
 // already disappeared, so it deliberately does not require a window lookup.
 func (c *Client) handleBell(packet protocol.Packet) {
 	c.display.Bell(packet.Int(3), packet.Int(4), packet.Int(5), packet.Str(8))
+}
+
+// handleWindowIcon decodes and applies
+// [wid, width, height, encoding, data].
+//
+// PNG is the only icon encoding advertised in the hello, so anything else is
+// a server bug or a packet from an incompatible peer.
+func (c *Client) handleWindowIcon(packet protocol.Packet) {
+	if len(packet) < 6 {
+		log.Printf("ignoring malformed window-icon packet")
+		return
+	}
+	wid := packet.Int(1)
+	window, ok := c.windows[wid]
+	if !ok {
+		c.debugf("ignoring icon for unknown window %d", wid)
+		return
+	}
+	if coding := packet.Str(4); coding != "png" {
+		c.debugf("ignoring window icon with unsupported encoding %q", coding)
+		return
+	}
+	data, ok := packet.Bytes(5)
+	if !ok {
+		log.Printf("ignoring window-icon packet with no pixel data")
+		return
+	}
+	width64, height64 := packet.Int(2), packet.Int(3)
+	if width64 <= 0 || height64 <= 0 ||
+		width64 > maxWindowIconDimension || height64 > maxWindowIconDimension {
+		log.Printf("ignoring window icon with invalid size %dx%d", width64, height64)
+		return
+	}
+	icon, err := decodeWindowIconPNG(data, int(width64), int(height64))
+	if err != nil {
+		log.Printf("decoding window %d icon: %v", wid, err)
+		return
+	}
+	if err := window.SetIcon(icon); err != nil {
+		log.Printf("setting window %d icon: %v", wid, err)
+	}
 }
 
 // handleDraw paints one damage rectangle.

@@ -30,6 +30,29 @@ type Cursor struct {
 	HotspotX, HotspotY int
 }
 
+// Icon is one application-provided window icon.
+//
+// Pixels are tightly packed, alpha-premultiplied BGRA. This is the native
+// representation used by Win32 and Wayland; X11 converts it to the straight
+// ARGB CARDINAL values required by _NET_WM_ICON.
+type Icon struct {
+	Pixels        []byte
+	Width, Height int
+}
+
+// Validate reports whether an icon is one the backends can carry.
+func (i *Icon) Validate() error {
+	if i.Width <= 0 || i.Height <= 0 ||
+		i.Width > int(^uint16(0)) || i.Height > int(^uint16(0)) {
+		return fmt.Errorf("invalid icon size %dx%d", i.Width, i.Height)
+	}
+	if len(i.Pixels) != i.Width*i.Height*BytesPerPixel {
+		return fmt.Errorf("icon has %d pixel bytes, want %d",
+			len(i.Pixels), i.Width*i.Height*BytesPerPixel)
+	}
+	return nil
+}
+
 // Validate reports whether a cursor is one the backends can carry.
 //
 // The pixels come from the server by way of a PNG decoder, so the dimensions
@@ -93,6 +116,10 @@ type Window interface {
 	Geometry() (x, y, width, height int)
 
 	SetTitle(title string)
+
+	// SetIcon applies an application-provided icon. A nil icon restores the
+	// platform default.
+	SetIcon(icon *Icon) error
 
 	// Map shows the window.
 	Map()

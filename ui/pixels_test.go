@@ -88,6 +88,22 @@ func TestConverterForRejectsUnknownFormat(t *testing.T) {
 	}
 }
 
+func TestIconValidate(t *testing.T) {
+	if err := (&Icon{Pixels: make([]byte, 2*3*BytesPerPixel), Width: 2, Height: 3}).Validate(); err != nil {
+		t.Errorf("valid icon rejected: %v", err)
+	}
+	for _, icon := range []*Icon{
+		{Width: 0, Height: 1},
+		{Width: 1, Height: 0},
+		{Width: 1 << 16, Height: 1},
+		{Pixels: make([]byte, 3), Width: 1, Height: 1},
+	} {
+		if err := icon.Validate(); err == nil {
+			t.Errorf("invalid icon accepted: %+v", icon)
+		}
+	}
+}
+
 // Convert has to honour both strides independently: the source is padded by the
 // server, and the destination is a window wider than the damage rectangle.
 func TestConvert(t *testing.T) {
