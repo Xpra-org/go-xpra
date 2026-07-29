@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -10,6 +11,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +51,7 @@ func TestParseHeaderRejectsBadInput(t *testing.T) {
 		"bad magic":   {'X', FlagRencodeplus, 0, 0, 0, 0, 0, 1},
 		"zero length": {'P', FlagRencodeplus, 0, 0, 0, 0, 0, 0},
 		"oversized":   {'P', FlagRencodeplus, 0, 0, 0xff, 0xff, 0xff, 0xff},
+		"large index": {'P', 0, 0, maxPacketIndex + 1, 0, 0, 0, 1},
 	}
 	for name, b := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -57,6 +60,29 @@ func TestParseHeaderRejectsBadInput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func rawChunkFrame(t *testing.T, index byte, payload []byte, compress bool) []byte {
+	t.Helper()
+	compression := byte(0)
+	if compress {
+		buf := make([]byte, 4+lz4.CompressBlockBound(len(payload)))
+		binary.LittleEndian.PutUint32(buf[:4], uint32(len(payload)))
+		var compressor lz4.Compressor
+		n, err := compressor.CompressBlock(payload, buf[4:])
+		if err != nil {
+			t.Fatalf("compressing raw chunk: %v", err)
+		}
+		if n == 0 {
+			t.Fatal("raw chunk fixture is not compressible")
+		}
+		payload = buf[:4+n]
+		compression = compressionLZ4 | 1
+	}
+	header := encodeHeader(0, len(payload))
+	header[2] = compression
+	header[3] = index
+	return append(header, payload...)
 }
 
 // frame builds a complete packet the way a server would, so the reader can be
@@ -180,20 +206,136 @@ func TestReadPacketSplitAcrossWrites(t *testing.T) {
 	}
 }
 
-// We negotiate chunks=false, so a chunked packet means the stream is no longer
-// interpretable and the connection must fail loudly rather than silently
-// mis-parsing pixel data.
-func TestReadRejectsChunkedPacket(t *testing.T) {
+func TestReadReassemblesRawChunk(t *testing.T) {
 	c, server := readerHarness(t)
-	data := frame(t, []any{"ping", 1}, false)
-	data[3] = 7 // packet index
+	pixels := []byte("out-of-band pixel data")
+	raw := rawChunkFrame(t, 7, pixels, false)
+	main := frame(t, []any{"draw", 3, 0, 0, 2, 1, "rgb24", []byte{}}, false)
+	next := frame(t, []any{"ping", 99}, false)
+	data := append(append(raw, main...), next...)
 	go func() { server.Write(data) }()
 
-	if _, ok := recvPacket(t, c); ok {
-		t.Fatal("chunked packet was accepted")
+	packet, ok := recvPacket(t, c)
+	if !ok {
+		t.Fatalf("connection closed: %v", c.Err())
 	}
-	if c.Err() == nil {
-		t.Error("no error recorded for a chunked packet")
+	got, ok := packet.Bytes(7)
+	if !ok || !bytes.Equal(got, pixels) {
+		t.Errorf("reassembled pixels = %q (ok=%v), want %q", got, ok, pixels)
+	}
+	packet, ok = recvPacket(t, c)
+	if !ok || packet.Type() != "ping" || packet.Int(1) != 99 {
+		t.Errorf("packet after chunks = %v (ok=%v), want [ping 99]", packet, ok)
+	}
+}
+
+func TestReadReassemblesMultipleAndCompressedRawChunks(t *testing.T) {
+	c, server := readerHarness(t)
+	first := []byte("first raw value")
+	third := bytes.Repeat([]byte("compressed raw value"), 100)
+	rawThird := rawChunkFrame(t, 3, third, true)
+	rawFirst := rawChunkFrame(t, 1, first, false)
+	main := frame(t, []any{"multi", []byte{}, "inline", ""}, false)
+	data := append(append(rawThird, rawFirst...), main...)
+	go func() { server.Write(data) }()
+
+	packet, ok := recvPacket(t, c)
+	if !ok {
+		t.Fatalf("connection closed: %v", c.Err())
+	}
+	if got, ok := packet.Bytes(1); !ok || !bytes.Equal(got, first) {
+		t.Errorf("chunk 1 = %q (ok=%v)", got, ok)
+	}
+	if got, ok := packet.Bytes(3); !ok || !bytes.Equal(got, third) {
+		t.Errorf("chunk 3 = %d bytes (ok=%v), want %d", len(got), ok, len(third))
+	}
+}
+
+func TestReadRejectsMalformedRawChunks(t *testing.T) {
+	chunk1 := rawChunkFrame(t, 1, []byte("one"), false)
+	tests := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{
+			name: "duplicate index",
+			data: append(append([]byte{}, chunk1...), chunk1...),
+			want: "duplicate raw chunk",
+		},
+		{
+			name: "too many",
+			data: append(append(append(append([]byte{},
+				rawChunkFrame(t, 1, []byte("one"), false)...),
+				rawChunkFrame(t, 2, []byte("two"), false)...),
+				rawChunkFrame(t, 3, []byte("three"), false)...),
+				rawChunkFrame(t, 4, []byte("four"), false)...),
+			want: "too many raw chunks",
+		},
+		{
+			name: "index outside packet",
+			data: append(rawChunkFrame(t, 7, []byte("seven"), false),
+				frame(t, []any{"ping", 1}, false)...),
+			want: "outside a 2-element packet",
+		},
+		{
+			name: "non-empty byte placeholder",
+			data: append(chunk1, frame(t, []any{"test", []byte("occupied")}, false)...),
+			want: "non-empty byte placeholder",
+		},
+		{
+			name: "non-empty string placeholder",
+			data: append(chunk1, frame(t, []any{"test", "occupied"}, false)...),
+			want: "non-empty string placeholder",
+		},
+		{
+			name: "wrong placeholder type",
+			data: append(chunk1, frame(t, []any{"test", 123}, false)...),
+			want: "int64 placeholder",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, server := readerHarness(t)
+			go func() { server.Write(tt.data) }()
+			if _, ok := recvPacket(t, c); ok {
+				t.Fatal("malformed chunks produced a packet")
+			}
+			if err := c.Err(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("connection error = %v, want it to contain %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadRejectsEOFWithPendingRawChunk(t *testing.T) {
+	c, server := readerHarness(t)
+	pending := rawChunkFrame(t, 1, []byte("pending"), false)
+	go func() {
+		server.Write(pending)
+		server.Close()
+	}()
+	if _, ok := recvPacket(t, c); ok {
+		t.Fatal("pending chunk produced a packet")
+	}
+	if err := c.Err(); err == nil || !strings.Contains(err.Error(), "pending raw chunk") {
+		t.Fatalf("connection error = %v, want pending chunk error", err)
+	}
+}
+
+func TestRawChunkStateBoundsReassembledSize(t *testing.T) {
+	state := rawChunkState{
+		packets: map[byte][]byte{1: {1}},
+		size:    maxPayloadSize - 1,
+	}
+	if err := state.add(2, []byte{2, 3}); err == nil ||
+		!strings.Contains(err.Error(), "packet limit") {
+		t.Fatalf("add error = %v, want packet size limit", err)
+	}
+	state.size = maxPayloadSize
+	if err := state.apply([]any{"test", []byte{}}, 1); err == nil ||
+		!strings.Contains(err.Error(), "reassembled packet") {
+		t.Fatalf("apply error = %v, want reassembled packet size limit", err)
 	}
 }
 

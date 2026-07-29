@@ -106,8 +106,8 @@ func TestBuildHello(t *testing.T) {
 	if !got.Has("encoders") {
 		t.Error("encoders is required: the server disconnects if encoder negotiation fails")
 	}
-	if got.Bool("chunks") {
-		t.Error("chunks must be false, or the server may split pixel data out of band")
+	if !got.Bool("chunks") {
+		t.Error("chunks must be enabled to receive large binary values out of band")
 	}
 	if !got.Bool("events") {
 		t.Error("events must be enabled to receive server lifecycle events")

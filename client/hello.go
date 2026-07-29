@@ -46,10 +46,10 @@ func buildHello(username string) rencodeplus.Dict {
 		// with PROTOCOL_ERROR (xpra/server/core.py:1567).
 		{Key: "encoders", Value: []string{"rencodeplus"}},
 
-		// Ask the server to inline binary payloads instead of splitting them
-		// into out-of-band chunks (socket_handler.py:629). This removes the
-		// entire chunk-reassembly path from the client.
-		{Key: "chunks", Value: false},
+		// Allow large binary elements to travel as separately compressed
+		// out-of-band chunks. The protocol reader splices them back into the
+		// main packet by top-level index (socket_handler.py:1126).
+		{Key: "chunks", Value: true},
 
 		// Packet-level compression, inbound only: our own packets are small
 		// input events. Note this is a different knob from the top-level "lz4"

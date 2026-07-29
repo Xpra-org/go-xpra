@@ -24,7 +24,9 @@ type webSocketServerResult struct {
 func TestDialWebSocket(t *testing.T) {
 	result := make(chan webSocketServerResult, 1)
 	serverPayload := bytes.Repeat([]byte("pixels"), 12_000)
-	serverFrame := frame(t, []any{"draw", 7, 0, 0, 200, 100, "rgb24", serverPayload}, false)
+	serverChunk := rawChunkFrame(t, 7, serverPayload, false)
+	serverMain := frame(t, []any{"draw", 7, 0, 0, 200, 100, "rgb24", []byte{}}, false)
+	serverFrame := append(serverChunk, serverMain...)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wsConn, err := websocket.Accept(w, r, &websocket.AcceptOptions{

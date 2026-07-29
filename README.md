@@ -91,7 +91,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
 ## What it does
 
 - plain TCP, TLS, WebSocket, secure WebSocket and SSH-subprocess transports, `rencodeplus` packet
-  encoding, inbound `lz4` decompression
+  encoding, inbound `lz4` decompression, and out-of-band binary chunk reassembly
 - password authentication (the `hmac+sha256` challenge)
 - window create, destroy, move/resize, raise, minimize/restore, title changes, and
   override-redirect popups
@@ -110,9 +110,8 @@ Pass `--backend wayland` to use the compositor directly anyway.
 
 ## What it does not do
 
-Everything else: h264 and the other encodings, mmap, chunked packets, clipboard,
-audio, native notification popups, system tray, and keymap upload. Linux and Windows only —
-no macOS.
+Everything else: h264 and the other encodings, mmap, clipboard, audio, native notification
+popups, system tray, and keymap upload. Linux and Windows only — no macOS.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
 nothing to leave out.
@@ -155,9 +154,11 @@ between, which adds a fifth.
 
 Two choices do most of the work of keeping this small.
 
-**`"chunks": false` in the hello.** The server otherwise sends large binary payloads as separate
-out-of-band packets to be spliced back in by index. Turning that off makes pixel data arrive
-inline and removes the entire reassembly path.
+**`"chunks": true` in the hello.** Large binary values can arrive before their encoded main
+packet as separately compressed out-of-band chunks. The protocol reader bounds and stores up to
+three of them, then replaces the main packet's empty top-level placeholders by index. That keeps
+large pixel and icon payloads out of the serialization layer without changing what the client
+state machine sees.
 
 **Building on the window system directly, with no toolkit.** An xpra client wants real top-level
 windows at absolute positions, unmanaged override-redirect popups, and keys named the way an X
@@ -204,12 +205,13 @@ resizes a window.
 ## Testing
 
 `go test ./...` covers the parts that do not need a server or a display: the `rencodeplus` codec
-against byte-exact vectors captured from xpra's own implementation, packet framing including lz4
-and malformed input, WebSocket framing and subprotocol negotiation, TLS/WSS trust and hostname
-verification against a local certificate, the authentication digest against a vector from
-`xpra.net.digest`, the pixel converters, the event queue, keysym naming, and the parser for the
-XKB keymap a Wayland compositor hands over. Each backend's share of that is compiled only for its
-own platform, so the keyboard is covered on the machine the tests run on and CI runs them on both.
+against byte-exact vectors captured from xpra's own implementation, packet framing including lz4,
+out-of-band chunk reassembly and malformed input, WebSocket framing and subprotocol negotiation,
+TLS/WSS trust and hostname verification against a local certificate, the authentication digest
+against a vector from `xpra.net.digest`, the pixel converters, the event queue, keysym naming, and
+the parser for the XKB keymap a Wayland compositor hands over. Each backend's share of that is
+compiled only for its own platform, so the keyboard is covered on the machine the tests run on and
+CI runs them on both.
 
 `internal/mockserver` covers the next layer without needing xpra installed at all: it is a fake
 server that forwards one window of known pixels, so the window lifecycle, the paint path and the

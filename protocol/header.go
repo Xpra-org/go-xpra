@@ -45,6 +45,10 @@ const (
 // video encodings, and it keeps a corrupt length field from exhausting memory.
 const maxPayloadSize = 64 << 20
 
+// Xpra reserves one header byte for the packet index but deliberately limits
+// it to the first 16 top-level packet elements.
+const maxPacketIndex = 15
+
 // header is a parsed packet header.
 type header struct {
 	flags       byte
@@ -54,13 +58,13 @@ type header struct {
 }
 
 // encodeHeader writes the 8-byte header for a payload of the given length.
-// We only ever send uncompressed, unchunked, rencodeplus-encoded packets.
+// Our outbound packets stay inline even though we accept inbound chunks.
 func encodeHeader(flags byte, payloadLen int) []byte {
 	h := make([]byte, HeaderSize)
 	h[0] = magic
 	h[1] = flags
 	h[2] = 0 // compression level: outbound packets are small, never compressed
-	h[3] = 0 // packet index: we negotiate chunks=false, so always the main packet
+	h[3] = 0 // packet index: outbound packets are always inline
 	binary.BigEndian.PutUint32(h[4:], uint32(payloadLen))
 	return h
 }
@@ -86,6 +90,9 @@ func parseHeader(b []byte) (header, error) {
 	}
 	if h.length > maxPayloadSize {
 		return header{}, fmt.Errorf("payload of %d bytes exceeds the %d byte limit", h.length, maxPayloadSize)
+	}
+	if h.index > maxPacketIndex {
+		return header{}, fmt.Errorf("packet index %d exceeds the limit of %d", h.index, maxPacketIndex)
 	}
 	return h, nil
 }

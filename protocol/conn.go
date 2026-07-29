@@ -19,6 +19,70 @@ import (
 // applies back-pressure to the sender instead of growing without limit.
 const writeQueue = 256
 
+// Xpra rejects a fourth pending raw chunk. Chunks are top-level binary packet
+// elements sent before the encoded main packet that names their indexes.
+const maxRawChunks = 3
+
+type rawChunkState struct {
+	packets map[byte][]byte
+	size    int
+}
+
+func (s *rawChunkState) add(index byte, payload []byte) error {
+	if len(payload) == 0 {
+		return fmt.Errorf("raw chunk at index %d is empty", index)
+	}
+	if _, duplicate := s.packets[index]; duplicate {
+		return fmt.Errorf("duplicate raw chunk at index %d", index)
+	}
+	if len(s.packets) >= maxRawChunks {
+		return fmt.Errorf("too many raw chunks: maximum is %d", maxRawChunks)
+	}
+	if len(payload) > maxPayloadSize-s.size {
+		return fmt.Errorf("raw chunks exceed the %d byte packet limit", maxPayloadSize)
+	}
+	if s.packets == nil {
+		s.packets = make(map[byte][]byte, maxRawChunks)
+	}
+	s.packets[index] = payload
+	s.size += len(payload)
+	return nil
+}
+
+func (s *rawChunkState) apply(packet []any, mainSize int) error {
+	if len(s.packets) == 0 {
+		return nil
+	}
+	if mainSize > maxPayloadSize-s.size {
+		return fmt.Errorf("reassembled packet exceeds the %d byte limit", maxPayloadSize)
+	}
+	for index := byte(1); index <= maxPacketIndex; index++ {
+		payload, ok := s.packets[index]
+		if !ok {
+			continue
+		}
+		if int(index) >= len(packet) {
+			return fmt.Errorf("raw chunk index %d is outside a %d-element packet", index, len(packet))
+		}
+		switch placeholder := packet[index].(type) {
+		case []byte:
+			if len(placeholder) != 0 {
+				return fmt.Errorf("raw chunk index %d has a non-empty byte placeholder", index)
+			}
+		case string:
+			if placeholder != "" {
+				return fmt.Errorf("raw chunk index %d has a non-empty string placeholder", index)
+			}
+		default:
+			return fmt.Errorf("raw chunk index %d has a %T placeholder", index, packet[index])
+		}
+		packet[index] = payload
+	}
+	clear(s.packets)
+	s.size = 0
+	return nil
+}
+
 // Conn is a framed xpra connection over a bidirectional stream.
 //
 // Incoming packets are decoded on a reader goroutine and delivered on Packets;
@@ -149,9 +213,12 @@ func (c *Conn) readLoop() {
 
 	reader := bufio.NewReaderSize(c.conn, 64*1024)
 	headerBuf := make([]byte, HeaderSize)
+	var chunks rawChunkState
 	for {
 		if _, err := io.ReadFull(reader, headerBuf); err != nil {
-			if err != io.EOF {
+			if err == io.EOF && len(chunks.packets) != 0 {
+				c.fail(fmt.Errorf("connection ended with %d pending raw chunk(s)", len(chunks.packets)))
+			} else if err != io.EOF {
 				c.fail(fmt.Errorf("reading packet header: %w", err))
 			}
 			return
@@ -167,19 +234,18 @@ func (c *Conn) readLoop() {
 			return
 		}
 
-		// Chunked packets carry a binary element out of band, to be spliced
-		// into the main packet by index. We negotiate chunks=false in the
-		// hello, so receiving one means the server ignored that capability and
-		// the stream is no longer something we can interpret.
-		if h.index != 0 {
-			c.fail(fmt.Errorf("server sent a chunked packet (index %d) despite chunks=false", h.index))
-			return
-		}
 		if h.compression != 0 {
 			if payload, err = decompress(h.compression, payload); err != nil {
 				c.fail(err)
 				return
 			}
+		}
+		if h.index != 0 {
+			if err := chunks.add(h.index, payload); err != nil {
+				c.fail(err)
+				return
+			}
+			continue
 		}
 		if h.flags&FlagRencodeplus == 0 {
 			c.fail(fmt.Errorf("packet is not rencodeplus-encoded (flags %#x)", h.flags))
@@ -193,6 +259,10 @@ func (c *Conn) readLoop() {
 		list, ok := decoded.([]any)
 		if !ok {
 			c.fail(fmt.Errorf("packet decoded to %T, want a list", decoded))
+			return
+		}
+		if err := chunks.apply(list, len(payload)); err != nil {
+			c.fail(err)
 			return
 		}
 		c.packets <- Packet(list)
