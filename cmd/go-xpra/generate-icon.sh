@@ -25,6 +25,10 @@ for spec in 256:240 128:120 64:60 48:45 32:30 24:23 16:16; do
 		"$work_dir/xpra-${size}.png"
 done
 
+# The 64 pixel image is also kept beside the source, embedded by icon.go as
+# the icon of the windows go-xpra opens on its own behalf.
+cp "$work_dir/xpra-64.png" "$script_dir/xpra-64.png"
+
 icotool --create --output="$script_dir/xpra.ico" \
 	"$work_dir/xpra-256.png" \
 	"$work_dir/xpra-128.png" \
