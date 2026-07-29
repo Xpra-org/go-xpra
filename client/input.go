@@ -14,13 +14,13 @@ const deviceID = -1
 // handleMotion forwards pointer movement.
 //
 // Coordinates are absolute (screen-relative), matching the geometry we reported
-// in map-window, so the server can place the pointer in its own screen space.
+// in window-map, so the server can place the pointer in its own screen space.
 func (c *Client) handleMotion(e ui.Motion) {
 	wid, _, ok := c.lookup(e.Window)
 	if !ok {
 		return
 	}
-	c.send("pointer", deviceID, 0, wid,
+	c.send("pointer-motion", deviceID, 0, wid,
 		[]any{e.X, e.Y}, rencodeplus.Dict{})
 }
 
@@ -58,8 +58,13 @@ func (c *Client) handleKey(e ui.Key) {
 		modifiers = []string{}
 	}
 	// group 0: we do not track keyboard layout groups.
-	c.send("key-action", wid, e.Name, e.Pressed, modifiers,
-		e.Keysym, e.Text, e.Keycode, 0)
+	c.send("keyboard-event", wid, e.Name, e.Pressed, rencodeplus.Dict{
+		{Key: "modifiers", Value: modifiers},
+		{Key: "keyval", Value: e.Keysym},
+		{Key: "string", Value: e.Text},
+		{Key: "keycode", Value: e.Keycode},
+		{Key: "group", Value: 0},
+	})
 }
 
 // handleFocus tells the server which window should receive keyboard input.
@@ -72,5 +77,5 @@ func (c *Client) handleFocus(e ui.Focus) {
 		return
 	}
 	c.focused = wid
-	c.send("focus", wid, []string{})
+	c.send("window-focus", wid, []string{})
 }

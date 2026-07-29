@@ -411,7 +411,7 @@ func (c *Client) handleNewWindow(packet protocol.Packet, overrideRedirect bool) 
 	// windows are never mapped by the client — the server damages them itself,
 	// and it warns if we send a map for one.
 	if !overrideRedirect {
-		c.send("map-window", wid, x, y, width, height, rencodeplus.Dict{}, rencodeplus.Dict{})
+		c.send("window-map", wid, x, y, width, height, rencodeplus.Dict{}, rencodeplus.Dict{})
 	}
 }
 
@@ -536,7 +536,7 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 	options := packet.Dict(10)
 
 	ack := func(decodeTime int64, message string) {
-		c.send("damage-sequence", sequence, wid, width, height, decodeTime, message)
+		c.send("window-draw-ack", sequence, wid, width, height, decodeTime, message)
 	}
 
 	window, ok := c.windows[wid]
@@ -636,7 +636,9 @@ func (c *Client) handleConfigure(e ui.Configure) {
 		log.Printf("window %d: %v", wid, err)
 		return
 	}
-	c.send("configure-window", wid, e.X, e.Y, e.Width, e.Height, rencodeplus.Dict{})
+	c.send("window-configure", wid, rencodeplus.Dict{
+		{Key: "geometry", Value: []any{e.X, e.Y, e.Width, e.Height}},
+	})
 }
 
 // handleCloseRequest passes the user's close request to the server, which owns
@@ -647,7 +649,7 @@ func (c *Client) handleCloseRequest(e ui.CloseRequest) {
 		return
 	}
 	c.debugf("window %d: close requested", wid)
-	c.send("close-window", wid)
+	c.send("window-close", wid)
 }
 
 // lookup resolves a local window id to the xpra window it belongs to. Events

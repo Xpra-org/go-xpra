@@ -74,25 +74,25 @@ func serve(conn *protocol.Conn) {
 				}},
 			})
 			send(conn, "startup-complete")
-			send(conn, "new-window", windowID, winX, winY, winWidth, winHeight,
+			send(conn, "window-create", windowID, winX, winY, winWidth, winHeight,
 				rencodeplus.Dict{{Key: "title", Value: "go-xpra mock window"}},
 				rencodeplus.Dict{})
 
-		case "map-window":
-			log.Printf("<- map-window %v", []any(packet)[1:])
+		case "window-map":
+			log.Printf("<- window-map %v", []any(packet)[1:])
 			paint(conn)
 
-		case "damage-sequence":
+		case "window-draw-ack":
 			// The client must never report a decode time of zero: xpra reads
 			// that as a failed paint, so it is worth seeing in the log.
-			log.Printf("<- damage-sequence %d wid=%d %dx%d decode=%dus %q",
+			log.Printf("<- window-draw-ack %d wid=%d %dx%d decode=%dus %q",
 				packet.Int(1), packet.Int(2), packet.Int(3), packet.Int(4),
 				packet.Int(5), packet.Str(6))
 
-		case "close-window":
-			log.Printf("<- close-window %d, destroying it and disconnecting", packet.Int(1))
-			send(conn, "lost-window", windowID)
-			send(conn, "disconnect", "test over")
+		case "window-close":
+			log.Printf("<- window-close %d, destroying it and disconnecting", packet.Int(1))
+			send(conn, "window-destroy", windowID)
+			send(conn, "connection-close", "test over")
 
 		case "ping", "ping_echo":
 			// Keepalive noise, and not what anyone is watching for.
@@ -148,9 +148,9 @@ func paint(conn *protocol.Conn) {
 }
 
 func draw(conn *protocol.Conn, x, y, w, h int, pixels []byte, rowstride, sequence int) {
-	send(conn, "draw", windowID, x, y, w, h, "rgb32", pixels, sequence, rowstride,
+	send(conn, "window-draw", windowID, x, y, w, h, "rgb32", pixels, sequence, rowstride,
 		rencodeplus.Dict{{Key: "rgb_format", Value: "BGRX"}})
-	log.Printf("-> draw %dx%d at %d,%d rowstride=%d", w, h, x, y, rowstride)
+	log.Printf("-> window-draw %dx%d at %d,%d rowstride=%d", w, h, x, y, rowstride)
 }
 
 func send(conn *protocol.Conn, packet ...any) {
