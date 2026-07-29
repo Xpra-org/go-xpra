@@ -21,6 +21,7 @@ import (
 
 	"github.com/Xpra-org/go-xpra/client"
 	"github.com/Xpra-org/go-xpra/protocol"
+	"github.com/Xpra-org/go-xpra/ui"
 )
 
 const (
@@ -43,6 +44,7 @@ type sslOptions struct {
 
 func main() {
 	log.SetFlags(log.Ltime)
+	noArguments := len(os.Args) == 1
 	verbose := flag.Bool("v", false, "log every packet and window event")
 	sslCACert := flag.String("ssl-ca-cert", "", "PEM CA certificate to trust for ssl:// connections")
 	sslInsecure := flag.Bool("ssl-insecure", false, "skip certificate verification for ssl:// connections")
@@ -59,11 +61,18 @@ func main() {
 		fmt.Printf("go-xpra %s\n", version)
 		return
 	}
+	ssl := sslOptions{caCert: *sslCACert, insecure: *sslInsecure}
+	if noArguments {
+		if err := runConnectionDialog(*verbose, ssl); err != nil {
+			log.Printf("error: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if flag.NArg() != 1 {
 		usage()
 		os.Exit(2)
 	}
-	ssl := sslOptions{caCert: *sslCACert, insecure: *sslInsecure}
 	if err := run(flag.Arg(0), *verbose, ssl); err != nil {
 		log.Printf("error: %v", err)
 		os.Exit(1)
@@ -71,11 +80,15 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `usage: go-xpra [OPTIONS] (tcp|ssl)://[USERNAME[:PASSWORD]@]HOST[:PORT]/
+	fmt.Fprintf(os.Stderr, `usage: go-xpra
+       go-xpra [OPTIONS] (tcp|ssl)://[USERNAME[:PASSWORD]@]HOST[:PORT]/
 
 Connects to an xpra server and shows its windows on the local desktop.
 The default port is 14500. ssl:// verifies the server certificate and hostname
 using the system trust store unless an SSL option says otherwise.
+
+With no arguments, a connection dialog collects the protocol, credentials,
+host and port.
 
 When credentials are omitted from the URL, the local user name is used.
 Passwords come from XPRA_PASSWORD or an interactive system prompt.
@@ -175,7 +188,33 @@ func run(rawURL string, verbose bool, ssl sslOptions) error {
 	}
 	defer display.Close()
 
+	return connect(target, verbose, ssl, tlsConfig, display)
+}
+
+// runConnectionDialog opens the local desktop first so the connection form and
+// the forwarded session can share it. This matters on Windows, whose display
+// backend owns one process-wide window thread and cannot be opened twice.
+func runConnectionDialog(verbose bool, ssl sslOptions) error {
+	display, err := openDisplay()
+	if err != nil {
+		return err
+	}
+	defer display.Close()
+
+	target, connectRequested, err := promptConnection(display)
+	if err != nil || !connectRequested {
+		return err
+	}
+	tlsConfig, err := makeTLSConfig(target, ssl)
+	if err != nil {
+		return err
+	}
+	return connect(target, verbose, ssl, tlsConfig, display)
+}
+
+func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.Config, display ui.Display) error {
 	var conn *protocol.Conn
+	var err error
 	if target.secure {
 		if ssl.insecure {
 			log.Printf("warning: TLS certificate verification is disabled")

@@ -35,6 +35,10 @@ trust store. Add a private CA without replacing the system roots:
 ./go-xpra --ssl-ca-cert /path/to/ca.pem ssl://server.example.com/
 ```
 
+Running `./go-xpra` without any arguments opens a connection dialog instead. It offers the
+supported `tcp` and `ssl` protocols and optional user name and password fields, and fills in the
+protocol's default port automatically.
+
 `--ssl-insecure` disables certificate and hostname verification for local testing and logs a
 warning; it cannot be combined with `--ssl-ca-cert`. SSL options are rejected with `tcp://` URLs.
 Credentials can be included in either URL. An omitted user name falls back to `USER` (or
