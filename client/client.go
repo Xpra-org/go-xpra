@@ -169,12 +169,20 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 	case "show-desktop":
 		c.handleShowDesktop(packet)
 	case "cursor":
-		c.handleCursor(packet)
+		if protocol.BackwardsCompatible {
+			c.handleCursor(packet)
+		}
+	case "cursor-data":
+		c.handleCursorData(packet)
+	case "cursor-default":
+		c.handleCursorDefault()
 
 	case "window-create":
 		c.handleNewWindow(packet, false)
 	case "new-override-redirect":
-		c.handleNewWindow(packet, true)
+		if protocol.BackwardsCompatible {
+			c.handleNewWindow(packet, true)
+		}
 	case "window-destroy":
 		c.handleLostWindow(packet)
 	case "window-move-resize":
@@ -195,7 +203,12 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 	case "ping_echo":
 		// Round-trip timing, which this client does not track.
 
-	case "disconnect", "connection-close":
+	case "disconnect":
+		if !protocol.BackwardsCompatible {
+			break
+		}
+		fallthrough
+	case "connection-close":
 		reason := packet.Str(1)
 		log.Printf("server disconnected us: %s", reason)
 		c.stop(nil)
@@ -272,9 +285,7 @@ func (c *Client) handleShowDesktop(packet protocol.Packet) {
 // A two-item packet asks for the platform default cursor instead.
 func (c *Client) handleCursor(packet protocol.Packet) {
 	if len(packet) <= 2 {
-		if err := c.display.SetCursor(nil); err != nil {
-			log.Printf("restoring the default cursor: %v", err)
-		}
+		c.handleCursorDefault()
 		return
 	}
 	if len(packet) < 10 {
@@ -294,15 +305,44 @@ func (c *Client) handleCursor(packet protocol.Packet) {
 		log.Printf("ignoring cursor packet with no pixel data")
 		return
 	}
+	c.applyCursorPNG(encoding, data, packet.Int(6), packet.Int(7))
+}
+
+// handleCursorData applies the modern
+// [encoding, width, height, xhot, yhot, serial, pixels, name] packet.
+func (c *Client) handleCursorData(packet protocol.Packet) {
+	if len(packet) < 9 {
+		log.Printf("ignoring malformed cursor-data packet")
+		return
+	}
+	data, ok := packet.Bytes(7)
+	if !ok {
+		log.Printf("ignoring cursor-data packet with no pixel data")
+		return
+	}
+	c.applyCursorPNG(packet.Str(1), data, packet.Int(4), packet.Int(5))
+}
+
+func (c *Client) applyCursorPNG(encoding string, data []byte, hotspotX, hotspotY int64) {
+	if encoding != "png" {
+		c.debugf("ignoring cursor with unsupported encoding %q", encoding)
+		return
+	}
 	cursor, err := decodeCursorPNG(data)
 	if err != nil {
 		log.Printf("decoding cursor: %v", err)
 		return
 	}
-	cursor.HotspotX = min(max(int(packet.Int(6)), 0), cursor.Width-1)
-	cursor.HotspotY = min(max(int(packet.Int(7)), 0), cursor.Height-1)
+	cursor.HotspotX = min(max(int(hotspotX), 0), cursor.Width-1)
+	cursor.HotspotY = min(max(int(hotspotY), 0), cursor.Height-1)
 	if err := c.display.SetCursor(cursor); err != nil {
 		log.Printf("setting cursor: %v", err)
+	}
+}
+
+func (c *Client) handleCursorDefault() {
+	if err := c.display.SetCursor(nil); err != nil {
+		log.Printf("restoring the default cursor: %v", err)
 	}
 }
 

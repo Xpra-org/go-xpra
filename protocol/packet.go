@@ -136,12 +136,13 @@ func (d Dict) Bytes(k string) []byte {
 }
 
 // canonicalNames maps the legacy packet names a backwards-compatible server
-// sends to the modern ones, so dispatch only has to handle one spelling.
+// sends to the modern ones, so dispatch only has to handle one spelling when
+// BackwardsCompatible is enabled.
 //
 // xpra/net/packet_type.py picks between the two based on the server's
 // XPRA_BACKWARDS_COMPATIBLE setting, which defaults to true — so in practice a
 // current server sends the legacy names, but a server with it turned off sends
-// the modern ones. Accepting both costs one map lookup.
+// the modern ones.
 var canonicalNames = map[string]string{
 	"new-window":                  "window-create",
 	"lost-window":                 "window-destroy",
@@ -156,7 +157,9 @@ var canonicalNames = map[string]string{
 	"notify_close":                "notification-close",
 }
 
-// Canonical returns the modern name for a packet type.
+// Canonical returns the modern name for a packet type. Legacy names are only
+// canonicalized when BackwardsCompatible is enabled; otherwise they remain
+// unchanged and therefore do not match modern dispatch cases.
 //
 // "new-override-redirect" is deliberately absent from the table: a
 // backwards-compatible server uses that name to mark override-redirect
@@ -165,8 +168,10 @@ var canonicalNames = map[string]string{
 // and xpra/client/subsystem/window/manager.py:236). Folding the name away here
 // would lose the distinction, so the client checks both signals.
 func Canonical(packetType string) string {
-	if modern, ok := canonicalNames[packetType]; ok {
-		return modern
+	if BackwardsCompatible {
+		if modern, ok := canonicalNames[packetType]; ok {
+			return modern
+		}
 	}
 	return packetType
 }

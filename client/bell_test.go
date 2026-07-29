@@ -22,6 +22,7 @@ func (d *ringingDisplay) Bell(percent, pitch, duration int64, name string) {
 }
 
 func TestHandleBell(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	for _, packetType := range []string{"bell", "window-bell"} {
 		t.Run(packetType, func(t *testing.T) {
 			display := &ringingDisplay{}
@@ -42,6 +43,7 @@ func TestHandleBell(t *testing.T) {
 }
 
 func TestHandleBellAcceptsShortPacket(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	display := &ringingDisplay{}
 	client := &Client{display: display}
 

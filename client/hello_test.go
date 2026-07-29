@@ -87,6 +87,7 @@ func TestChallengeReplyAcceptsSuffixedDigest(t *testing.T) {
 // The hello has to encode cleanly and carry the handful of keys the server
 // treats as mandatory.
 func TestBuildHello(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	caps := buildHello("")
 	encoded, err := rencodeplus.Encode([]any{"hello", caps})
 	if err != nil {
@@ -179,6 +180,38 @@ func TestBuildHello(t *testing.T) {
 	// "wants" would replace the server's default list rather than extend it.
 	if got.Has("wants") {
 		t.Error("the hello must not carry a wants key")
+	}
+}
+
+func TestBuildHelloWithoutCompatibility(t *testing.T) {
+	setBackwardsCompatible(t, false)
+	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("")})
+	if err != nil {
+		t.Fatalf("encoding hello: %v", err)
+	}
+	decoded, err := rencodeplus.Decode(encoded)
+	if err != nil {
+		t.Fatalf("decoding hello: %v", err)
+	}
+	got := protocol.Packet(decoded.([]any)).Dict(1)
+
+	if got.Dict("pointer") == nil {
+		t.Error("modern pointer capability is missing")
+	}
+	cursor := got.Dict("cursor")
+	if cursor == nil {
+		t.Fatal("modern cursor capability is missing")
+	}
+	if cursor.Bool("backwards-compatible") {
+		t.Error("cursor backwards-compatible capability is enabled")
+	}
+	for _, key := range []string{"rencodeplus", "mouse", "cursors", "notifications"} {
+		if got.Has(key) {
+			t.Errorf("legacy %q capability is advertised", key)
+		}
+	}
+	if !got.Bool("notification") {
+		t.Error("modern notification capability is not enabled")
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 )
 
 func TestHandleNotificationShow(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	for _, packetType := range []string{"notify_show", "notification-show"} {
 		t.Run(packetType, func(t *testing.T) {
 			client := &Client{}
@@ -35,6 +36,7 @@ func TestHandleNotificationShow(t *testing.T) {
 }
 
 func TestHandleNotificationShowWithoutApplication(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	client := &Client{}
 	packet := protocol.Packet{
 		"notify_show", "", int64(42), "", int64(0), "", "Session ready", "",
@@ -49,6 +51,7 @@ func TestHandleNotificationShowWithoutApplication(t *testing.T) {
 }
 
 func TestHandleNotificationClose(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	for _, packetType := range []string{"notify_close", "notification-close"} {
 		t.Run(packetType, func(t *testing.T) {
 			client := &Client{verbose: true}
@@ -63,6 +66,7 @@ func TestHandleNotificationClose(t *testing.T) {
 }
 
 func TestHandleNotificationRejectsMalformedPackets(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	client := &Client{}
 	for _, packet := range []protocol.Packet{
 		{"notify_show"},

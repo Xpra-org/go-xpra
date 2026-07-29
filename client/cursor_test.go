@@ -34,6 +34,7 @@ func cursorPNG(t *testing.T) []byte {
 }
 
 func TestHandleCursor(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	display := &cursorDisplay{}
 	client := &Client{display: display}
 	packet := protocol.Packet{
@@ -61,6 +62,7 @@ func TestHandleCursor(t *testing.T) {
 }
 
 func TestHandleCursorReset(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	display := &cursorDisplay{}
 	client := &Client{display: display}
 
@@ -72,6 +74,7 @@ func TestHandleCursorReset(t *testing.T) {
 }
 
 func TestHandleCursorRejectsInvalidPackets(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	display := &cursorDisplay{}
 	client := &Client{display: display}
 
@@ -83,5 +86,36 @@ func TestHandleCursorRejectsInvalidPackets(t *testing.T) {
 
 	if len(display.calls) != 0 {
 		t.Errorf("SetCursor called %d times for invalid packets", len(display.calls))
+	}
+}
+
+func TestHandleModernCursorPackets(t *testing.T) {
+	setBackwardsCompatible(t, false)
+	display := &cursorDisplay{}
+	client := &Client{display: display}
+
+	client.handlePacket(protocol.Packet{
+		"cursor", "png", int64(0), int64(0), int64(2), int64(1),
+		int64(0), int64(0), int64(7), cursorPNG(t), "legacy",
+	})
+	if len(display.calls) != 0 {
+		t.Fatal("legacy cursor packet was accepted with compatibility disabled")
+	}
+
+	client.handlePacket(protocol.Packet{
+		"cursor-data", "png", int64(2), int64(1), int64(99), int64(-4),
+		int64(7), cursorPNG(t), "pointer",
+	})
+	if len(display.calls) != 1 || display.calls[0] == nil {
+		t.Fatalf("SetCursor calls = %v, want one image", display.calls)
+	}
+	got := display.calls[0]
+	if got.HotspotX != 1 || got.HotspotY != 0 {
+		t.Errorf("cursor hotspot = %d,%d, want 1,0", got.HotspotX, got.HotspotY)
+	}
+
+	client.handlePacket(protocol.Packet{"cursor-default"})
+	if len(display.calls) != 2 || display.calls[1] != nil {
+		t.Errorf("SetCursor calls = %v, want image then nil", display.calls)
 	}
 }

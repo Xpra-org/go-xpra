@@ -441,6 +441,10 @@ func TestDictAccessors(t *testing.T) {
 }
 
 func TestCanonicalNames(t *testing.T) {
+	old := BackwardsCompatible
+	BackwardsCompatible = true
+	t.Cleanup(func() { BackwardsCompatible = old })
+
 	cases := map[string]string{
 		"draw":                  "window-draw",
 		"window-draw":           "window-draw",
@@ -455,5 +459,20 @@ func TestCanonicalNames(t *testing.T) {
 		if got := Canonical(in); got != want {
 			t.Errorf("Canonical(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestCanonicalNamesDisabled(t *testing.T) {
+	old := BackwardsCompatible
+	BackwardsCompatible = false
+	t.Cleanup(func() { BackwardsCompatible = old })
+
+	for _, packetType := range []string{"draw", "new-window", "lost-window", "notify_show"} {
+		if got := Canonical(packetType); got != packetType {
+			t.Errorf("Canonical(%q) = %q with compatibility disabled", packetType, got)
+		}
+	}
+	if got := Canonical("window-draw"); got != "window-draw" {
+		t.Errorf("Canonical modern name = %q", got)
 	}
 }

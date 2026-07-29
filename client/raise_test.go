@@ -17,6 +17,7 @@ func (w *raisingWindow) Raise() {
 }
 
 func TestHandleRaiseWindow(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	for _, packetType := range []string{"raise-window", "window-raise"} {
 		t.Run(packetType, func(t *testing.T) {
 			window := &raisingWindow{}
@@ -32,6 +33,7 @@ func TestHandleRaiseWindow(t *testing.T) {
 }
 
 func TestHandleRaiseWindowIgnoresUnknownWindow(t *testing.T) {
+	setBackwardsCompatible(t, true)
 	client := &Client{windows: map[int64]ui.Window{}}
 	client.handlePacket(protocol.Packet{"raise-window", int64(99)})
 }

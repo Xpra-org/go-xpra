@@ -43,11 +43,8 @@ func buildHello(username string) rencodeplus.Dict {
 		{Key: "client_type", Value: "go"},
 
 		// Packet encoder negotiation. Without a match the server disconnects
-		// with PROTOCOL_ERROR (xpra/server/core.py:1567). "encoders" is the
-		// modern key; the bare boolean is what a backwards-compatible server
-		// falls back to (xpra/net/protocol/socket_handler.py:630).
+		// with PROTOCOL_ERROR (xpra/server/core.py:1567).
 		{Key: "encoders", Value: []string{"rencodeplus"}},
-		{Key: "rencodeplus", Value: true},
 
 		// Ask the server to inline binary payloads instead of splitting them
 		// into out-of-band chunks (socket_handler.py:629). This removes the
@@ -63,27 +60,23 @@ func buildHello(username string) rencodeplus.Dict {
 
 		{Key: "windows", Value: true},
 		{Key: "keyboard", Value: true},
-		{Key: "mouse", Value: true},
+		{Key: "pointer", Value: rencodeplus.Dict{
+			{Key: "double_click", Value: rencodeplus.Dict{}},
+		}},
 		{Key: "bell", Value: true},
 		{Key: "show-desktop", Value: true},
 		{Key: "ping", Value: true},
 
-		// Request PNG cursor forwarding. "backwards-compatible" selects the
-		// established cursor packet shape handled by this client; the plural
-		// boolean is the gate used by older servers.
+		// Request PNG cursor forwarding. The server uses cursor-data and
+		// cursor-default unless compatibility mode asks for the legacy cursor
+		// packet shape.
 		{Key: "cursor", Value: rencodeplus.Dict{
 			{Key: "encodings", Value: []string{"png"}},
-			{Key: "backwards-compatible", Value: true},
+			{Key: "backwards-compatible", Value: protocol.BackwardsCompatible},
 		}},
-		{Key: "cursors", Value: true},
 
-		// Receive desktop notifications for logging. The singular boolean is
-		// the modern capability; backwards-compatible servers read the nested
-		// plural form and gate packets on its enabled flag.
+		// Receive desktop notifications for logging.
 		{Key: "notification", Value: true},
-		{Key: "notifications", Value: rencodeplus.Dict{
-			{Key: "enabled", Value: true},
-		}},
 
 		// Receive informational server lifecycle events such as handshake,
 		// startup, suspend, resume and exit. The dedicated protocol packets
@@ -136,6 +129,17 @@ func buildHello(username string) rencodeplus.Dict {
 		// Advertising only one digest forces the server to choose it.
 		{Key: "digest", Value: []string{digestName}},
 		{Key: "salt-digest", Value: []string{digestName}},
+	}
+
+	if protocol.BackwardsCompatible {
+		// Legacy capability spellings are only advertised when their matching
+		// packet types are accepted.
+		caps.Set("rencodeplus", true)
+		caps.Set("mouse", true)
+		caps.Set("cursors", true)
+		caps.Set("notifications", rencodeplus.Dict{
+			{Key: "enabled", Value: true},
+		})
 	}
 
 	// uuid and session-id are optional, but if present they must pass
