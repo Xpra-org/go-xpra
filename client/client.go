@@ -41,13 +41,19 @@ type Client struct {
 	byLocal map[ui.WindowID]int64 // local window id -> xpra window id
 	focused int64
 
-	serverVersion string
-	challengeSeen bool
-	username      string
-	password      string
-	exitErr       error
-	quit          chan struct{}
+	serverVersion  string
+	challengeSeen  bool
+	username       string
+	password       string
+	passwordPrompt PasswordPrompt
+	exitErr        error
+	quit           chan struct{}
 }
+
+// PasswordPrompt obtains a password when neither the connection URL nor
+// XPRA_PASSWORD supplied one. The string is the server's description of the
+// requested credential.
+type PasswordPrompt func(string) (string, error)
 
 // New builds a client over an established connection and local display.
 func New(conn *protocol.Conn, display ui.Display, verbose bool, username, password string) *Client {
@@ -61,6 +67,13 @@ func New(conn *protocol.Conn, display ui.Display, verbose bool, username, passwo
 		byLocal:  map[ui.WindowID]int64{},
 		quit:     make(chan struct{}),
 	}
+}
+
+// SetPasswordPrompt installs the platform-specific interactive password
+// prompt. It is only called if the server sends an authentication challenge
+// and no password was supplied non-interactively.
+func (c *Client) SetPasswordPrompt(prompt PasswordPrompt) {
+	c.passwordPrompt = prompt
 }
 
 // Run performs the handshake and then services packets and local events until
@@ -304,12 +317,9 @@ func (c *Client) handleChallenge(packet protocol.Packet) {
 	}
 	c.challengeSeen = true
 
-	pw := c.password
-	if pw == "" {
-		pw = os.Getenv("XPRA_PASSWORD")
-	}
-	if pw == "" {
-		c.stop(errors.New("server requires a password: include it in the URL or set XPRA_PASSWORD"))
+	pw, err := c.challengePassword(packet.Str(5))
+	if err != nil {
+		c.stop(err)
 		return
 	}
 	response, salt, err := challengeReply(packet, pw)
@@ -320,6 +330,26 @@ func (c *Client) handleChallenge(packet protocol.Packet) {
 	if err := c.sendHello(response, salt); err != nil {
 		c.stop(fmt.Errorf("sending the challenge response: %w", err))
 	}
+}
+
+func (c *Client) challengePassword(description string) (string, error) {
+	if c.password != "" {
+		return c.password, nil
+	}
+	if password := os.Getenv("XPRA_PASSWORD"); password != "" {
+		return password, nil
+	}
+	if c.passwordPrompt == nil {
+		return "", errors.New("server requires a password: include it in the URL or set XPRA_PASSWORD")
+	}
+	password, err := c.passwordPrompt(description)
+	if err != nil {
+		return "", fmt.Errorf("prompting for the server password: %w", err)
+	}
+	if password == "" {
+		return "", errors.New("prompting for the server password: no password was entered")
+	}
+	return password, nil
 }
 
 func (c *Client) handlePing(packet protocol.Packet) {

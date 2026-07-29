@@ -37,8 +37,11 @@ trust store. Add a private CA without replacing the system roots:
 
 `--ssl-insecure` disables certificate and hostname verification for local testing and logs a
 warning; it cannot be combined with `--ssl-ca-cert`. SSL options are rejected with `tcp://` URLs.
-Credentials can be included in either URL; omitted values fall back to `USER` and
-`XPRA_PASSWORD`. Pass `-v` to log every window event and unhandled packet type.
+Credentials can be included in either URL. An omitted user name falls back to `USER` (or
+`USERNAME` on Windows). When an authenticated server challenges a connection with no password,
+the client first checks `XPRA_PASSWORD`, then uses `pinentry` on Linux with a hidden terminal
+prompt as its fallback, or the native Windows credentials dialog. Pass `-v` to log every window
+event and unhandled packet type.
 
 On Linux, `--backend` picks between the two backends and defaults to `auto`, which uses X11 when
 `$DISPLAY` is set and Wayland otherwise. X11 wins on purpose: a session running XWayland is still

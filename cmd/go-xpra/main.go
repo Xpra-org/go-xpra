@@ -77,8 +77,8 @@ Connects to an xpra server and shows its windows on the local desktop.
 The default port is 14500. ssl:// verifies the server certificate and hostname
 using the system trust store unless an SSL option says otherwise.
 
-When credentials are omitted from the URL, the local user name and
-XPRA_PASSWORD are used.
+When credentials are omitted from the URL, the local user name is used.
+Passwords come from XPRA_PASSWORD or an interactive system prompt.
 
 Example:
   xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
@@ -190,7 +190,18 @@ func run(rawURL string, verbose bool, ssl sslOptions) error {
 	defer conn.Close()
 
 	log.Printf("connected to %s", target.address)
-	return client.New(conn, display, verbose, target.username, target.password).Run()
+	xpraClient := client.New(conn, display, verbose, target.username, target.password)
+	promptUsername := target.username
+	if promptUsername == "" {
+		promptUsername = os.Getenv("USER")
+		if promptUsername == "" {
+			promptUsername = os.Getenv("USERNAME")
+		}
+	}
+	xpraClient.SetPasswordPrompt(func(description string) (string, error) {
+		return promptPassword(promptUsername, target.address, description)
+	})
+	return xpraClient.Run()
 }
 
 // parseConnectionURL accepts the standard Xpra TCP and SSL URL forms and
