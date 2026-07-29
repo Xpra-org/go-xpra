@@ -201,6 +201,13 @@ func promptConnection(display ui.Display) (connectionURL, bool, error) {
 	}
 	defer window.Destroy()
 	window.SetTitle("Connect to Xpra")
+	icon, err := loadDialogIcon()
+	if err != nil {
+		return connectionURL{}, false, err
+	}
+	if err := window.SetIcon(icon); err != nil {
+		return connectionURL{}, false, fmt.Errorf("setting connection dialog icon: %w", err)
+	}
 	if err := paintConnectionForm(window, form); err != nil {
 		return connectionURL{}, false, err
 	}

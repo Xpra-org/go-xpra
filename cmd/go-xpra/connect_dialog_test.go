@@ -138,6 +138,16 @@ func TestPromptConnectionConnectsFromKeyboard(t *testing.T) {
 	if display.window.paints == 0 {
 		t.Error("dialog was never painted")
 	}
+	if display.window.icon == nil {
+		t.Fatal("dialog icon was not set")
+	}
+	if err := display.window.icon.Validate(); err != nil {
+		t.Errorf("dialog icon is invalid: %v", err)
+	}
+	if display.window.icon.Width != dialogIconSize || display.window.icon.Height != dialogIconSize {
+		t.Errorf("dialog icon is %dx%d, want %dx%d",
+			display.window.icon.Width, display.window.icon.Height, dialogIconSize, dialogIconSize)
+	}
 }
 
 func TestPromptConnectionCancelButton(t *testing.T) {
@@ -189,6 +199,7 @@ type dialogTestWindow struct {
 	id                  ui.WindowID
 	x, y, width, height int
 	title               string
+	icon                *ui.Icon
 	mapped              bool
 	raised              bool
 	destroyed           bool
@@ -199,12 +210,15 @@ func (w *dialogTestWindow) ID() ui.WindowID { return w.id }
 func (w *dialogTestWindow) Geometry() (int, int, int, int) {
 	return w.x, w.y, w.width, w.height
 }
-func (w *dialogTestWindow) SetTitle(title string)  { w.title = title }
-func (w *dialogTestWindow) SetIcon(*ui.Icon) error { return nil }
-func (w *dialogTestWindow) Map()                   { w.mapped = true }
-func (w *dialogTestWindow) Raise()                 { w.raised = true }
-func (w *dialogTestWindow) Minimize(bool)          {}
-func (w *dialogTestWindow) Destroy()               { w.destroyed = true }
+func (w *dialogTestWindow) SetTitle(title string) { w.title = title }
+func (w *dialogTestWindow) SetIcon(icon *ui.Icon) error {
+	w.icon = icon
+	return nil
+}
+func (w *dialogTestWindow) Map()          { w.mapped = true }
+func (w *dialogTestWindow) Raise()        { w.raised = true }
+func (w *dialogTestWindow) Minimize(bool) {}
+func (w *dialogTestWindow) Destroy()      { w.destroyed = true }
 func (w *dialogTestWindow) MoveResize(x, y, width, height int) error {
 	w.x, w.y, w.width, w.height = x, y, width, height
 	return nil
