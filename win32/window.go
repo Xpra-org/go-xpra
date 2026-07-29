@@ -65,6 +65,15 @@ func (w *Window) create() error {
 	if err != nil {
 		return err
 	}
+	// A server commonly uses 0,0 as a new window's initial position. For a
+	// decorated window, frame expands the content rectangle upwards and to the
+	// left, which would put the title bar outside the primary screen. Shift
+	// that one initial placement back on-screen while retaining the requested
+	// content size. Subsequent moves still honour the server's coordinates
+	// exactly, including legitimate negative coordinates on another monitor.
+	if w.x == 0 && w.y == 0 {
+		outer = placeInitialFrame(outer)
+	}
 	hwnd, err := createWindowEx(exStyle, w.d.class, nil, style,
 		outer.Left, outer.Top, outer.Right-outer.Left, outer.Bottom-outer.Top,
 		0, w.d.instance)
@@ -98,6 +107,21 @@ func frame(x, y, width, height int, style, exStyle uint32) (rect, error) {
 		return rect{}, err
 	}
 	return r, nil
+}
+
+// placeInitialFrame keeps a frame whose content was requested at the primary
+// screen origin accessible, without changing its size.
+func placeInitialFrame(r rect) rect {
+	width, height := r.Right-r.Left, r.Bottom-r.Top
+	if r.Left < 0 {
+		r.Left = 0
+		r.Right = width
+	}
+	if r.Top < 0 {
+		r.Top = 0
+		r.Bottom = height
+	}
+	return r
 }
 
 // ID returns the window handle, which is what events for this window carry.

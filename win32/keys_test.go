@@ -124,6 +124,24 @@ func TestFrame(t *testing.T) {
 	}
 }
 
+func TestInitialFrameAtOriginStaysAccessible(t *testing.T) {
+	style, exStyle := styles(false)
+	outer, err := frame(0, 0, 640, 480, style, exStyle)
+	if err != nil {
+		t.Fatalf("frame: %v", err)
+	}
+	width, height := outer.Right-outer.Left, outer.Bottom-outer.Top
+
+	placed := placeInitialFrame(outer)
+	if placed.Left != 0 || placed.Top != 0 {
+		t.Errorf("initial frame starts at %d,%d, want 0,0", placed.Left, placed.Top)
+	}
+	if placed.Right-placed.Left != width || placed.Bottom-placed.Top != height {
+		t.Errorf("initial frame changed size from %dx%d to %dx%d",
+			width, height, placed.Right-placed.Left, placed.Bottom-placed.Top)
+	}
+}
+
 func TestHiword(t *testing.T) {
 	// The wheel delta arrives in the high word of wParam, one notch at a time
 	// and signed.
