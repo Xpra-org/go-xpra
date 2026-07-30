@@ -57,5 +57,35 @@ go test ./...
 %{_datadir}/pixmaps/%{name}.png
 
 %changelog
-* Thu Jul 30 2026 Antoine Martin <antoine@xpra.org> - 0.2.1-1
-- Initial package
+* Thu Jul 30 2026 Antoine Martin <antoine@xpra.org> 0.2.1-1
+- Platforms, build and packaging:
+   bump the version
+   share common Linux UI and keysym code
+   add a native Wayland backend
+   report when the Wayland compositor does not draw window frames
+   add an executable icon on MS Windows
+   add the Go-styled icon to the main page
+   keep the initial MS Windows title bar accessible
+   fix dialog icons on MS Windows
+   remove duplicated asset functions
+   add RPM and Debian packaging
+   package the desktop launcher and icon
+- Network:
+   add SSL support
+   add the SSH subprocess transport
+   use modern Xpra packet types
+   gate legacy packets behind the compatibility toggle
+   gate the draw acknowledgement layout by compatibility mode
+   add WebSocket transports
+   support out-of-band chunks
+- Encodings:
+   decode WebP using video-range YCbCr
+- Features:
+   add native authentication prompts
+   add a connection dialog for argument-free startup
+   add window icon support
+   use the Xpra icon in dialogs
+- Documentation and testing:
+   add the mock server and its test guide
+   complete the mock server connection support
+   document mock server testing
