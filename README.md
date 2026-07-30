@@ -209,6 +209,37 @@ on a message posted to an invisible helper window — posted to a window rather 
 so that the work still gets done inside the modal loops Windows runs while the user drags or
 resizes a window.
 
+## Dependencies
+
+Keeping the dependency graph small is a deliberate constraint here — it is why each window system
+is addressed through its own bindings rather than a GUI toolkit, why there is no cgo, and why `ssh`
+shells out to the system binary instead of linking a client. What is left is six direct
+requirements in `go.mod`.
+
+**[xpra-org.github.io/go-xpra](https://xpra-org.github.io/go-xpra/)** maps what they come to: for
+each module, every package it reaches, which of those it is the *only* route to — what dropping it
+would really remove — and the same again for the standard library behind them. The page is
+committed as `docs/index.html` and is entirely self-contained, so it works offline from a checkout
+too.
+
+Linux compiles 245 packages: 39 third-party from 7 modules, 8 of our own, and 198 from the standard
+library. Windows compiles 221, of which 16 are third-party from 3 modules — the X11 and Wayland
+stacks are Linux-only, so `xgb`, `xgbutil` and `go-wayland` are absent from it entirely. Which
+dependency looks expensive depends on whether the standard library is counted: `xgbutil` is the
+largest without it, reaching 14 packages of which 9 have no other route, while `coder/websocket` is
+4 packages of its own — and, once the standard library is counted, the only route to 110 of the 188
+it reaches, nearly all of them `crypto/tls`. The page also flags the three modules `go.sum` pins that no build ever
+compiles a line of — `freetype-go`, `graphics-go` and `x/text` — and that `xgb` resolves to v1.3.1
+against the v1.3.0 `xgbutil` asks for.
+
+Regenerate it after changing a dependency (needs python 3 and `go`, nothing else):
+
+```shell
+python3 docs/dependency-graph.py
+```
+
+[`docs/README.md`](docs/README.md) describes what the page shows and how the data is derived.
+
 ## Testing
 
 `go test ./...` covers the parts that do not need a server or a display: the `rencodeplus` codec

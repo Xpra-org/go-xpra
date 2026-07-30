@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Regenerate `docs/dependency-graph.html`, the interactive dependency graph.
+"""Regenerate `docs/index.html`, the interactive dependency graph.
 
     python3 docs/dependency-graph.py [main-package]
 
 Reads the package graph straight out of `go list` and inlines it into
 `dependency-graph.template.html`, producing one self-contained page (no network
-access at view time, no external assets).
+access at view time, no external assets). It is `docs/index.html` because GitHub
+Pages serves this directory, so that name is what xpra-org.github.io/go-xpra/
+resolves to.
 
 Packages, not modules, are the nodes, because packages are what the toolchain
 actually compiles: `go list -deps` applies build constraints, so the graph is
@@ -283,7 +285,7 @@ def main():
             sys.exit(f"template is missing {placeholder}")
         page = page.replace(placeholder, value, 1)
 
-    target_file = DOCS / "dependency-graph.html"
+    target_file = DOCS / "index.html"
     target_file.write_text(page)
 
     print(f"wrote {target_file.relative_to(ROOT)} ({len(page) // 1024} KiB)")

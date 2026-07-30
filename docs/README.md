@@ -1,12 +1,13 @@
 # docs
 
-## `dependency-graph.html`
+## `index.html` — the dependency graph
 
-An interactive map of every package this client compiles, for both targets. It is a single
-self-contained page — no external stylesheets, scripts or fonts — so it works from a local checkout
-with no network access. GitHub serves `.html` as source rather than rendering it, so open the file
-from a clone (`xdg-open docs/dependency-graph.html`) rather than following a link to it on
-github.com.
+Published at **[xpra-org.github.io/go-xpra](https://xpra-org.github.io/go-xpra/)**: GitHub Pages
+serves this directory, so `index.html` is what that URL resolves to. It is an interactive map of
+every package this client compiles, for both targets, and a single self-contained page — no
+external stylesheets, scripts or fonts — so a local checkout works just as well offline
+(`xdg-open docs/index.html`). Browsing to the file on github.com does not, because GitHub serves
+`.html` from a repository as source rather than rendering it.
 
 Packages are the nodes, because packages are what `go build` compiles; modules are what `go.mod`
 declares, so they own the wedges, the left rail and the version story. Standard library packages are
@@ -40,8 +41,8 @@ After any dependency change:
 python3 docs/dependency-graph.py
 ```
 
-That rewrites `docs/dependency-graph.html` from `docs/dependency-graph.template.html`, inlining a
-freshly read graph. It needs nothing but python 3 and a working `go` — no third-party python
+That rewrites `docs/index.html` from `docs/dependency-graph.template.html`, inlining a freshly read
+graph. It needs nothing but python 3 and a working `go` — no third-party python
 packages, and no cross toolchain for the Windows target, since `go list` only has to *resolve* the
 graph, not build it. It takes well under a second.
 
