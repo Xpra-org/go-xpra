@@ -1,3 +1,4 @@
+%define _disable_source_fetch 0
 %global debug_package %{nil}
 %global desktop_id org.xpra.go-xpra
 %{!?run_tests:%global run_tests 1}
@@ -23,6 +24,11 @@ TLS, WebSocket, or SSH and displays forwarded application windows on the
 local X11 or Wayland desktop.
 
 %prep
+sha256=`sha256sum %{SOURCE0} | awk '{print $1}'`
+if [ "${sha256}" != "5beed38336dc1614b71f2613b7772d123bd6fd81ca5217fb8305433cffd3eab2" ]; then
+	echo "invalid checksum for %{SOURCE0}"
+	exit 1
+fi
 %autosetup
 
 %build
