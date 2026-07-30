@@ -1,0 +1,1818 @@
+<title>go-xpra dependency graph</title>
+
+<style>
+  :root {
+    --ground: #f4f6f7;
+    --panel: #ffffff;
+    --sunk: #eaeff1;
+    --rule: #dde4e7;
+    --rule-strong: #bfcace;
+    --text: #101a1e;
+    --text-dim: #5d6a70;
+    --text-faint: #8d999f;
+    --cyan: #00728c;
+    --cyan-soft: #5cb8d0;
+    --on-cyan: #ffffff;
+    --graphite: #7e8894;
+    --amber: #9a5b06;
+    --focus: #00728c;
+
+    --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono",
+            "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0d1418;
+      --panel: #131c21;
+      --sunk: #101a1e;
+      --rule: #233036;
+      --rule-strong: #3a4a52;
+      --text: #e3e9eb;
+      --text-dim: #93a1a8;
+      --text-faint: #6b787f;
+      --cyan: #35bedd;
+      --cyan-soft: #2a7789;
+      --on-cyan: #06222a;
+      --graphite: #78838f;
+      --amber: #d59b3f;
+      --focus: #35bedd;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --ground: #f4f6f7;
+    --panel: #ffffff;
+    --sunk: #eaeff1;
+    --rule: #dde4e7;
+    --rule-strong: #bfcace;
+    --text: #101a1e;
+    --text-dim: #5d6a70;
+    --text-faint: #8d999f;
+    --cyan: #00728c;
+    --cyan-soft: #5cb8d0;
+    --on-cyan: #ffffff;
+    --graphite: #7e8894;
+    --amber: #9a5b06;
+    --focus: #00728c;
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0d1418;
+    --panel: #131c21;
+    --sunk: #101a1e;
+    --rule: #233036;
+    --rule-strong: #3a4a52;
+    --text: #e3e9eb;
+    --text-dim: #93a1a8;
+    --text-faint: #6b787f;
+    --cyan: #35bedd;
+    --cyan-soft: #2a7789;
+    --on-cyan: #06222a;
+    --graphite: #78838f;
+    --amber: #d59b3f;
+    --focus: #35bedd;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+
+  /* ---------- top bar ---------- */
+
+  .bar {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 0;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel);
+  }
+
+  .bar-id {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 18px;
+    border-right: 1px solid var(--rule);
+    min-width: 250px;
+  }
+
+  .bar-id b {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .bar-id b span { color: var(--cyan); }
+
+  .bar-id small {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.01em;
+  }
+
+  .bar-seg {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 18px;
+    border-right: 1px solid var(--rule);
+  }
+
+  .eyebrow {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  .switch {
+    display: flex;
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .switch button {
+    appearance: none;
+    border: 0;
+    border-right: 1px solid var(--rule-strong);
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 12px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+
+  .switch button:last-child { border-right: 0; }
+  .switch button:hover { color: var(--text); background: var(--sunk); }
+
+  .switch button[aria-pressed="true"] {
+    background: var(--cyan);
+    color: var(--on-cyan);
+    font-weight: 600;
+  }
+
+  .counts {
+    display: flex;
+    gap: 26px;
+    padding: 8px 18px;
+    margin-right: auto;
+  }
+
+  .count {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .count-n {
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .count-l {
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  .count.is-cyan .count-n { color: var(--cyan); }
+  .count.is-graphite .count-n { color: var(--graphite); }
+
+  /* ---------- shell ---------- */
+
+  .shell {
+    display: grid;
+    grid-template-columns: 336px minmax(0, 1fr);
+    height: calc(100vh - 68px);
+    min-height: 560px;
+  }
+
+  /* ---------- left rail ---------- */
+
+  .rail {
+    border-right: 1px solid var(--rule);
+    background: var(--panel);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .rail-head {
+    padding: 13px 16px 11px;
+    border-bottom: 1px solid var(--rule);
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    z-index: 2;
+  }
+
+  .rail-head p {
+    margin: 6px 0 0;
+    font-family: var(--sans);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    max-width: 46ch;
+  }
+
+  .dep {
+    display: block;
+    width: 100%;
+    text-align: left;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    border-left: 2px solid transparent;
+    color: inherit;
+    font: inherit;
+    padding: 9px 16px 10px;
+    cursor: pointer;
+  }
+
+  .dep:hover { background: var(--sunk); }
+
+  .dep[aria-pressed="true"] {
+    background: var(--sunk);
+    border-left-color: var(--cyan);
+  }
+
+  .dep-top {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .dep-name {
+    font-weight: 600;
+    font-size: 12.5px;
+    letter-spacing: -0.005em;
+  }
+
+  .dep-ver {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dep-n {
+    margin-left: auto;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+  }
+
+  .dep-bar {
+    display: flex;
+    height: 7px;
+    margin-top: 6px;
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+  }
+
+  .dep[aria-pressed="true"] .dep-bar { background: var(--ground); }
+
+  .dep-bar i { display: block; height: 100%; }
+  .dep-bar .ex { background: var(--cyan); }
+  .dep-bar .sh { background: var(--cyan-soft); opacity: 0.55; }
+
+  .dep-legend {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+    font-size: 10px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rail-note {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    line-height: 1.55;
+    color: var(--text-faint);
+    margin: 0;
+    padding: 12px 16px 20px;
+    max-width: 44ch;
+  }
+
+  .rail-note code {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    overflow-wrap: anywhere;
+  }
+
+  .dep-tag {
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+
+  .dep-tag.is-ours { color: var(--cyan); border-color: var(--cyan); }
+  .dep-tag.is-bump { color: var(--amber); border-color: var(--amber); }
+
+  /* a module go.mod requires that this target compiles nothing of */
+  .dep[disabled] { cursor: default; opacity: 0.5; }
+  .dep[disabled]:hover { background: transparent; }
+  .dep[disabled] .dep-bar { visibility: hidden; }
+
+  /* ---------- stage ---------- */
+
+  /* min-height:0 matters: without it this grid item grows to fit the tree/table
+     and shoves the detail card below the fold */
+  .stage {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    background: var(--ground);
+  }
+
+  .stage-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel);
+  }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    font-size: 10.5px;
+    color: var(--text-dim);
+    align-items: center;
+  }
+
+  .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .key i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: block;
+  }
+
+  .key .k-cyan { background: var(--cyan); }
+  .key .k-graphite { background: var(--graphite); }
+  .key .k-direct { background: var(--ground); border: 3px solid var(--cyan); }
+  .key .k-dup { background: transparent; border: 2px solid var(--amber); }
+
+  .search {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .search input {
+    appearance: none;
+    background: var(--sunk);
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 8px;
+    width: 168px;
+  }
+
+  .search input::placeholder { color: var(--text-faint); }
+
+  .stage-body {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .view { display: none; height: 100%; position: relative; }
+  .view.is-on { display: block; }
+
+  #cv {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  #cv.is-drag { cursor: grabbing; }
+
+  .hint {
+    position: absolute;
+    left: 14px;
+    bottom: 12px;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    pointer-events: none;
+  }
+
+  /* ---------- tree view ---------- */
+
+  .tree {
+    height: 100%;
+    overflow: auto;
+    padding: 14px 16px 40px;
+    font-size: 12.5px;
+    line-height: 1.62;
+    white-space: pre;
+  }
+
+  .tw { display: block; min-width: max-content; }
+
+  .row {
+    display: block;
+    color: var(--text-faint);
+  }
+
+  .row-hit {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 2px;
+  }
+
+  .row-hit:hover { background: var(--sunk); color: var(--cyan); }
+  .row.is-std .row-hit { color: var(--graphite); }
+  .row.is-sel .row-hit { background: var(--cyan); color: var(--on-cyan); }
+  .row .v { color: var(--text-faint); }
+  .row .note { color: var(--graphite); font-size: 11px; }
+  .row .dup { color: var(--amber); }
+
+  /* ---------- table view ---------- */
+
+  .tablewrap {
+    height: 100%;
+    overflow: auto;
+    padding-bottom: 40px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 720px;
+    font-size: 12px;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--rule-strong);
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 9.5px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  thead th:hover { color: var(--text); }
+  thead th[aria-sort] { color: var(--cyan); }
+
+  tbody td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  tbody tr:hover td { background: var(--sunk); }
+  tbody tr.is-sel td { background: var(--sunk); }
+  tbody tr.is-sel td:first-child { box-shadow: inset 2px 0 0 var(--cyan); }
+
+  .cell-name {
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .cell-name:hover { color: var(--cyan); }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+  .muted { color: var(--text-dim); }
+
+  .cell-kind { white-space: nowrap; }
+
+  .pill {
+    display: inline-block;
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+
+  .pill.p-third { color: var(--cyan); }
+  .pill.p-std { color: var(--graphite); }
+  .pill.p-own { color: var(--text-dim); }
+  .pill.p-dup { color: var(--amber); }
+
+  /* ---------- detail card ---------- */
+
+  .detail {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    width: 320px;
+    max-height: calc(100% - 28px);
+    overflow: auto;
+    background: var(--panel);
+    border: 1px solid var(--rule-strong);
+    border-radius: 2px;
+    padding: 12px 14px 13px;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.16);
+  }
+
+  .detail h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .detail h3 span {
+    font-weight: 400;
+    color: var(--text-faint);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .detail .desc {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    margin: 7px 0 0;
+    max-width: 42ch;
+  }
+
+  .detail dl {
+    margin: 11px 0 0;
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 5px 10px;
+    font-size: 11.5px;
+  }
+
+  .detail dt {
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    font-weight: 700;
+    padding-top: 2px;
+  }
+
+  .detail dd {
+    margin: 0;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .detail dd a { color: var(--cyan); }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .chip {
+    appearance: none;
+    border: 1px solid var(--rule-strong);
+    background: transparent;
+    border-radius: 2px;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 10.5px;
+    padding: 1px 5px;
+    cursor: pointer;
+  }
+
+  .chip:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  .detail-empty {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text-dim);
+    margin: 0;
+  }
+
+  .detail-close {
+    float: right;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--text-faint);
+    font: inherit;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+  }
+
+  .detail-close:hover { color: var(--cyan); }
+
+  @media (max-width: 900px) {
+    .shell {
+      grid-template-columns: 1fr;
+      height: auto;
+    }
+
+    .rail { border-right: 0; border-bottom: 1px solid var(--rule); max-height: 300px; }
+    .stage-body { height: 70vh; min-height: 420px; }
+    .detail { position: static; width: auto; margin: 12px; max-height: none; }
+  }
+</style>
+
+<header class="bar">
+  <div class="bar-id">
+    <b>go-<span>xpra</span> &middot; dependency graph</b>
+    <small>Every package the build compiles, and which module in go.mod drags it there.</small>
+  </div>
+
+  <div class="bar-seg">
+    <span class="eyebrow">Target</span>
+    <div class="switch" id="target-switch">
+      <button type="button" data-target="linux" aria-pressed="true">Linux</button>
+      <button type="button" data-target="windows" aria-pressed="false">Windows</button>
+    </div>
+  </div>
+
+  <div class="bar-seg">
+    <span class="eyebrow">Std&nbsp;lib</span>
+    <div class="switch" id="std-switch">
+      <button type="button" data-std="0" aria-pressed="true">Hide</button>
+      <button type="button" data-std="1" aria-pressed="false">Show</button>
+    </div>
+  </div>
+
+  <div class="counts">
+    <div class="count">
+      <span class="count-n" id="c-total">&mdash;</span>
+      <span class="count-l">packages</span>
+    </div>
+    <div class="count is-cyan">
+      <span class="count-n" id="c-third">&mdash;</span>
+      <span class="count-l">third&#8209;party</span>
+    </div>
+    <div class="count is-graphite">
+      <span class="count-n" id="c-std">&mdash;</span>
+      <span class="count-l">standard library</span>
+    </div>
+    <div class="count">
+      <span class="count-n" id="c-mods">&mdash;</span>
+      <span class="count-l">modules built</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-head">
+      <span class="eyebrow">Modules in go.mod</span>
+      <p>
+        Bar length is every package that module reaches. The solid part is what
+        <em>only</em> it reaches &mdash; what dropping the module would actually
+        remove.
+      </p>
+    </div>
+    <div id="dep-list"></div>
+    <p class="rail-note" id="unbuilt"></p>
+
+    <p class="rail-note">
+      Read from <code>go list -deps</code> per GOOS/GOARCH, against the working tree
+      at __STAMP__. Build-constrained, so it is what <code>go build</code> compiles
+      for that target and nothing else; test-only imports are excluded.
+      Regenerate with <code>python3 docs/dependency-graph.py</code>.
+    </p>
+  </aside>
+
+  <section class="stage">
+    <div class="stage-head">
+      <div class="switch" id="view-switch">
+        <button type="button" data-view="graph" aria-pressed="true">Graph</button>
+        <button type="button" data-view="tree" aria-pressed="false">Tree</button>
+        <button type="button" data-view="table" aria-pressed="false">Table</button>
+      </div>
+
+      <div class="legend">
+        <span class="key"><i class="k-cyan"></i>third&#8209;party</span>
+        <span class="key"><i class="k-graphite"></i>standard library</span>
+        <span class="key"><i class="k-direct"></i>we import it by name</span>
+        <span class="key"><i class="k-dup"></i>module bumped past a requirement</span>
+      </div>
+
+      <div class="search">
+        <label class="eyebrow" for="q">Find</label>
+        <input id="q" type="search" placeholder="package path&hellip;" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="stage-body">
+      <div class="view is-on" id="view-graph">
+        <canvas id="cv"></canvas>
+        <p class="hint">drag to pan &middot; scroll to zoom &middot; click a package for detail &middot; rings = imports deep from main</p>
+      </div>
+      <div class="view tree" id="view-tree"></div>
+      <div class="view tablewrap" id="view-table"></div>
+    </div>
+
+    <div class="detail" id="detail"></div>
+  </section>
+</div>
+
+<script type="application/json" id="graph-data">__DATA__</script>
+
+<script>
+  (function () {
+    "use strict";
+
+    var DATA = JSON.parse(document.getElementById("graph-data").textContent);
+
+    var state = {
+      target: "linux",
+      std: false,     // whether standard library packages are in the picture
+      view: "graph",
+      focus: null,    // a module path: dims every package outside its closure
+      sel: null,      // the package shown in the detail card
+      query: "",
+      sort: { col: "name", dir: 1 }
+    };
+
+    var G = null;     // derived model for the active target
+    var sim = null;   // laid-out node positions
+
+    // ---------------------------------------------------------------- model
+
+    // `nodes` is parallel to `keys`, and edges and owners index into them; the
+    // page would be twice the size if every import path were spelled out again.
+    function buildModel(target, withStd) {
+      var raw = DATA[target];
+      var keys = [], nodes = {}, edges = [];
+
+      raw.keys.forEach(function (k, i) {
+        var s = raw.nodes[i];
+        if (!withStd && s.std) return;
+        keys.push(k);
+        nodes[k] = {
+          key: k, name: s.n, mod: s.m, std: s.std, own: s.own, named: s.named,
+          files: s.files, doc: s.doc, out: [], in: [], depth: Infinity,
+          owners: s.owners.map(function (o) { return raw.direct[o]; })
+        };
+      });
+
+      raw.edges.forEach(function (e) {
+        var a = raw.keys[e[0]], b = raw.keys[e[1]];
+        if (!nodes[a] || !nodes[b]) return;
+        var edge = { a: a, b: b, k: e[2] ? "std" : "pkg" };
+        edges.push(edge);
+        nodes[a].out.push({ to: b, kind: edge.k });
+        nodes[b].in.push({ from: a, kind: edge.k });
+      });
+
+      // depth = fewest imports deep from the main package
+      var root = raw.keys[raw.root];
+      var queue = [root];
+      nodes[root].depth = 0;
+      while (queue.length) {
+        var cur = nodes[queue.shift()];
+        cur.out.forEach(function (e) {
+          if (nodes[e.to].depth > cur.depth + 1) {
+            nodes[e.to].depth = cur.depth + 1;
+            queue.push(e.to);
+          }
+        });
+      }
+
+      // closure / exclusive tallies per module
+      var tally = {};
+      raw.direct.forEach(function (d) { tally[d] = { closure: 0, exclusive: 0 }; });
+      keys.forEach(function (k) {
+        var o = nodes[k].owners;
+        o.forEach(function (d) {
+          if (tally[d]) {
+            tally[d].closure++;
+            if (o.length === 1) tally[d].exclusive++;
+          }
+        });
+      });
+
+      // our own module leads the rail; the rest go by how much they drag in
+      var direct = raw.direct.slice().sort(function (a, b) {
+        if ((a === raw.mainmod) !== (b === raw.mainmod)) return a === raw.mainmod ? -1 : 1;
+        return tally[b].closure - tally[a].closure || a.localeCompare(b);
+      });
+
+      return {
+        root: root, mainmod: raw.mainmod, nodes: nodes, keys: keys, edges: edges,
+        direct: direct, tally: tally, mods: raw.mods, stats: raw.stats,
+        unbuilt: raw.unbuilt || [],
+        // a module this target compiles nothing of gets a rail row, not a wedge
+        wedged: direct.filter(function (d) { return tally[d].closure > 0; }),
+        maxClosure: direct.reduce(function (m, d) {
+          return Math.max(m, tally[d].closure);
+        }, 1)
+      };
+    }
+
+    function modOf(key) {
+      return G.mods[G.nodes[key].mod] || { v: "", lic: "", repo: "", bump: null };
+    }
+
+    // github.com/rajveermalviya/go-wayland/wayland reads as go-wayland/wayland
+    function modLabel(m) {
+      var parts = String(m).replace(/\/v\d+$/, "").split("/");
+      return (m === G.mainmod ? parts.slice(-1) : parts.slice(-2)).join("/");
+    }
+
+    // a pseudo-version is a timestamp and a hash; the date is the readable part
+    function shortVer(v) {
+      var m = /^v0\.0\.0-(\d{4})(\d{2})(\d{2})\d{6}-/.exec(v || "");
+      return m ? m[1] + "-" + m[2] + "-" + m[3] : (v || "");
+    }
+
+    // Go resolves one version per module path, so nothing is ever in the graph
+    // twice; the near equivalent is a module dragged past what someone asked for
+    function isBumped(n) {
+      var m = G.mods[n.mod];
+      return !!(m && m.bump);
+    }
+
+    function inFocus(key) {
+      if (!state.focus) return true;
+      if (key === G.root) return true;
+      return G.nodes[key].owners.indexOf(state.focus) !== -1;
+    }
+
+    function matchesQuery(key) {
+      return state.query && key.toLowerCase().indexOf(state.query) !== -1;
+    }
+
+    // the packages of a module that something outside it imports - where a
+    // reader coming from the rail enters its subtree
+    function entriesOf(m) {
+      var out = G.keys.filter(function (k) {
+        if (G.nodes[k].mod !== m) return false;
+        return G.nodes[k].in.length === 0 || G.nodes[k].in.some(function (e) {
+          return G.nodes[e.from].mod !== m;
+        });
+      });
+      return out.length ? out : G.keys.filter(function (k) { return G.nodes[k].mod === m; });
+    }
+
+    // ------------------------------------------------------------ layout
+
+    // Deterministic seed so the picture is identical on every reload.
+    function hash(s) {
+      var h = 2166136261;
+      for (var i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return (h >>> 0) / 4294967296;
+    }
+
+    var STEP = 92;     // smallest distance between two rings
+    var HUB = 96;      // empty core, so the innermost ring is a real circle
+    var GAP = 26;      // world-space breathing room between two packages on a ring
+
+    // filled in by layout(): a ring holding 60 packages has to be further out
+    // than one holding 6, or the relaxation below has nowhere to put them
+    var radii = [0];
+
+    function ringRadius(d) {
+      return radii[Math.min(d, radii.length - 1)];
+    }
+
+    // circular relaxation: push neighbours apart until each has `need` radians
+    function spread(list, angle, need) {
+      list.sort(function (a, b) { return angle[a] - angle[b]; });
+      if (list.length < 2) return;
+
+      // a full ring of the standard library will not fit whatever we do; share
+      // the circle out evenly rather than leaving packages stacked, in the order
+      // they already sit in, so each module's run of them stays contiguous
+      if (need * list.length >= Math.PI * 2) {
+        var from = angle[list[0]];
+        list.forEach(function (k, i) {
+          angle[k] = from + (Math.PI * 2 * i) / list.length;
+        });
+        return;
+      }
+      for (var pass = 0; pass < 160; pass++) {
+        for (var i = 0; i < list.length; i++) {
+          var j = (i + 1) % list.length;
+          var gap = angle[list[j]] - angle[list[i]];
+          if (j === 0) gap += Math.PI * 2;
+          if (gap < need) {
+            var push = (need - gap) / 2;
+            angle[list[i]] -= push;
+            angle[list[j]] += push;
+          }
+        }
+      }
+    }
+
+    // Radial layout. Each module owns an angular wedge whose width is proportional
+    // to the number of packages *only it* reaches, so the picture is a pie of who
+    // costs what; radius is imports deep from the main package. Packages several
+    // modules share sit at the average bearing of their owners' wedges, which lands
+    // them between the wedges they bridge.
+    function layout() {
+      var P = {}, wedges = {};
+      var weight = 0;
+
+      G.wedged.forEach(function (d) { weight += G.tally[d].exclusive + 1; });
+
+      var at = -Math.PI / 2;
+      G.wedged.forEach(function (d) {
+        var w = ((G.tally[d].exclusive + 1) / weight) * Math.PI * 2;
+        wedges[d] = { start: at, end: at + w, mid: at + w / 2 };
+        at += w;
+      });
+
+      // packages a single module owns, spread evenly across its wedge. A package
+      // whose path *is* the module path is left out, so that the module's root
+      // package falls on the wedge's centre line below.
+      var owned = {};
+      G.wedged.forEach(function (d) { owned[d] = []; });
+      G.keys.forEach(function (k) {
+        var o = G.nodes[k].owners;
+        if (o.length === 1 && owned[o[0]] && k !== o[0]) owned[o[0]].push(k);
+      });
+
+      var angle = {};
+      G.wedged.forEach(function (d) {
+        var list = owned[d].sort(function (a, b) {
+          return (G.nodes[a].depth - G.nodes[b].depth) || a.localeCompare(b);
+        });
+        var span = wedges[d].end - wedges[d].start;
+        list.forEach(function (k, i) {
+          angle[k] = wedges[d].start + span * ((i + 0.5) / list.length);
+        });
+      });
+
+      G.keys.forEach(function (k) {
+        if (k === G.root || angle[k] !== undefined) return;
+        var o = G.nodes[k].owners.filter(function (d) { return wedges[d]; });
+        var sx = 0, sy = 0;
+        o.forEach(function (d) { sx += Math.cos(wedges[d].mid); sy += Math.sin(wedges[d].mid); });
+        var m = Math.sqrt(sx * sx + sy * sy);
+        // the jitter matters: half the standard library is shared by every module
+        // and so shares one bearing, which the relaxation below cannot break up
+        angle[k] = m > 0.08 ? Math.atan2(sy, sx) + (hash(k) - 0.5) * 0.5
+                            : hash(k) * Math.PI * 2;
+      });
+
+      // pull apart packages that landed on top of each other on the same ring
+      var rings = {}, maxDepth = 1;
+      G.keys.forEach(function (k) {
+        if (k === G.root) return;
+        var d = isFinite(G.nodes[k].depth) ? G.nodes[k].depth : 5;
+        (rings[d] = rings[d] || []).push(k);
+        if (d > maxDepth) maxDepth = d;
+      });
+
+      radii = [0];
+      for (var d = 1; d <= maxDepth; d++) {
+        var fits = ((rings[d] || []).length * GAP * 1.05) / (Math.PI * 2);
+        radii[d] = Math.max(radii[d - 1] + STEP, fits, HUB);
+      }
+
+      Object.keys(rings).forEach(function (d) {
+        spread(rings[d], angle, GAP / ringRadius(Number(d)));
+      });
+
+      G.keys.forEach(function (k) {
+        if (k === G.root) { P[k] = { x: 0, y: 0 }; return; }
+        var r = ringRadius(isFinite(G.nodes[k].depth) ? G.nodes[k].depth : 5);
+        P[k] = { x: Math.cos(angle[k]) * r, y: Math.sin(angle[k]) * r };
+      });
+
+      G.wedges = wedges;
+      G.maxDepth = maxDepth;
+
+      // a module is not a node, so its leader line starts from the middle of its
+      // own packages
+      var anchor = {};
+      G.wedged.forEach(function (d) {
+        var sx = 0, sy = 0, n = 0;
+        G.keys.forEach(function (k) {
+          if (G.nodes[k].mod === d) { sx += P[k].x; sy += P[k].y; n++; }
+        });
+        anchor[d] = n ? { x: sx / n, y: sy / n }
+                      : { x: Math.cos(wedges[d].mid) * HUB, y: Math.sin(wedges[d].mid) * HUB };
+      });
+      G.anchor = anchor;
+
+      // rim labels start over their own wedge, then get their own breathing room
+      var rim = {};
+      G.wedged.forEach(function (d) { rim[d] = wedges[d].mid; });
+      spread(G.wedged.slice(), rim, 46 / rimRadius());
+      G.rimAngle = rim;
+
+      return P;
+    }
+
+    // ------------------------------------------------------------ canvas
+
+    var cv = document.getElementById("cv");
+    var ctx = cv.getContext("2d");
+    var view = { k: 1, tx: 0, ty: 0 };
+    var hover = null;
+    var css = {};
+    var needFit = true;
+    var faceStack = "monospace";
+
+    function readTheme() {
+      var s = getComputedStyle(document.documentElement);
+      ["cyan", "graphite", "amber", "rule", "rule-strong", "text",
+       "text-dim", "text-faint", "panel", "ground"].forEach(function (v) {
+        css[v] = s.getPropertyValue("--" + v).trim();
+      });
+      faceStack = getComputedStyle(document.body).fontFamily || "monospace";
+    }
+
+    function radius(n) {
+      if (n.key === G.root) return 10;
+      if (n.named) return 7.5 + 1.2 * Math.sqrt(n.in.length);
+      return 3.4 + 1.9 * Math.sqrt(n.in.length);
+    }
+
+    function rimRadius() {
+      return ringRadius(G.maxDepth) + 54;
+    }
+
+    // leave a margin for the rim labels, which stick out radially in every direction
+    function fitView() {
+      var w = cv.clientWidth || 800, h = cv.clientHeight || 600;
+      view.k = Math.max(0.15, (Math.min(w, h) / 2 - 104) / rimRadius());
+      view.tx = w / 2;
+      view.ty = h / 2;
+    }
+
+    function resize() {
+      var dpr = window.devicePixelRatio || 1;
+      var w = cv.clientWidth, h = cv.clientHeight;
+      if (!w || !h) return;
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (needFit) { fitView(); needFit = false; }
+      draw();
+    }
+
+    function toScreen(p) {
+      return { x: p.x * view.k + view.tx, y: p.y * view.k + view.ty };
+    }
+
+    function draw() {
+      if (!sim) return;
+      var w = cv.clientWidth, h = cv.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      // one ring per hop from Cargo.toml
+      ctx.strokeStyle = css.rule;
+      ctx.lineWidth = 1;
+      for (var d = 1; d <= G.maxDepth; d++) {
+        ctx.beginPath();
+        ctx.arc(view.tx, view.ty, ringRadius(d) * view.k, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // rim bracket per module: arc length = packages only it reaches
+      var rimR = rimRadius() * view.k;
+      ctx.lineCap = "butt";
+      G.wedged.forEach(function (dk) {
+        var wg = G.wedges[dk];
+        var lit = state.focus === dk;
+        var la = G.rimAngle[dk];
+        ctx.globalAlpha = state.focus ? (lit ? 1 : 0.12) : 0.5;
+        ctx.strokeStyle = css.cyan;
+        ctx.lineWidth = lit ? 5 : 3;
+        ctx.beginPath();
+        ctx.arc(view.tx, view.ty, rimR, wg.start + 0.008, wg.end - 0.008);
+        ctx.stroke();
+
+        // leader from the module's packages out to its name on the rim
+        var p = toScreen(G.anchor[dk]);
+        ctx.globalAlpha = state.focus ? (lit ? 0.5 : 0.06) : 0.18;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(view.tx + Math.cos(la) * rimR, view.ty + Math.sin(la) * rimR);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // set radially, so neighbouring names fan out instead of colliding
+        var right = Math.cos(la) >= 0;
+        ctx.globalAlpha = state.focus ? (lit ? 1 : 0.3) : 0.95;
+        ctx.font = (lit ? "700 " : "600 ") + "11.5px " + faceStack;
+        ctx.fillStyle = lit ? css.cyan : css["text-dim"];
+        ctx.save();
+        ctx.translate(view.tx + Math.cos(la) * (rimR + 9),
+                      view.ty + Math.sin(la) * (rimR + 9));
+        ctx.rotate(right ? la : la + Math.PI);
+        ctx.textAlign = right ? "left" : "right";
+        ctx.textBaseline = "middle";
+        ctx.fillText(modLabel(dk), 0, 0);
+        ctx.restore();
+      });
+      ctx.globalAlpha = 1;
+
+      var active = state.sel || hover;
+      var near = {};
+      if (active && G.nodes[active]) {
+        near[active] = true;
+        G.nodes[active].out.forEach(function (e) { near[e.to] = true; });
+        G.nodes[active].in.forEach(function (e) { near[e.from] = true; });
+      }
+
+      // edges, bowed toward the hub so long chords bundle instead of slicing
+      // across the rings (the bow is proportional to the angular distance)
+      G.edges.forEach(function (e) {
+        var a = toScreen(sim[e.a]), b = toScreen(sim[e.b]);
+        var lit = active ? (near[e.a] && near[e.b]) : false;
+        var dim = !(inFocus(e.a) && inFocus(e.b));
+        ctx.globalAlpha = lit ? 0.95 : dim ? 0.05 : (active ? 0.11 : 0.33);
+        ctx.strokeStyle = lit ? css.cyan : css["rule-strong"];
+        ctx.lineWidth = lit ? 1.6 : 1;
+        ctx.setLineDash(e.k === "std" ? [3, 3] : []);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        if (e.a === G.root) {
+          ctx.lineTo(b.x, b.y);
+        } else {
+          var wa = sim[e.a], wb = sim[e.b];
+          var arcSpan = Math.abs(Math.atan2(wa.y, wa.x) - Math.atan2(wb.y, wb.x));
+          if (arcSpan > Math.PI) arcSpan = Math.PI * 2 - arcSpan;
+          var t = Math.cos(arcSpan / 2) * 0.92;
+          ctx.quadraticCurveTo(
+            view.tx + ((a.x + b.x) / 2 - view.tx) * t,
+            view.ty + ((a.y + b.y) / 2 - view.ty) * t,
+            b.x, b.y);
+        }
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+
+      // nodes
+      var labels = [];
+      G.keys.forEach(function (k) {
+        var n = G.nodes[k];
+        var p = toScreen(sim[k]);
+        var r = radius(n) * Math.max(0.62, Math.min(view.k, 1.5));
+        var dim = !inFocus(k) || (active && !near[k]);
+        var hit = matchesQuery(k);
+
+        ctx.globalAlpha = dim ? (hit ? 0.55 : 0.16) : 1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = k === G.root ? css.text : n.std ? css.graphite : css.cyan;
+        ctx.fill();
+
+        // the packages we import by name ourselves are drawn hollow
+        if (n.named) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r * 0.44, 0, Math.PI * 2);
+          ctx.fillStyle = css.ground;
+          ctx.fill();
+        }
+
+        if (isBumped(n)) {
+          ctx.strokeStyle = css.amber;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r + 3, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        if (k === active || hit) {
+          ctx.strokeStyle = css.cyan;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r + 4.5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
+
+        // modules are named on the rim, so a package label here is worth it only
+        // for the busy ones
+        var rank = k === G.root ? 100
+                 : k === active ? 95
+                 : hit ? 88
+                 : n.in.length >= 2 ? 20 + n.in.length
+                 : view.k > 1.4 ? 5
+                 : 0;
+        if (rank && !dim) labels.push({ n: n, p: p, r: r, rank: rank });
+      });
+
+      // labels last, best first, and never stacked on top of each other
+      var taken = [];
+      labels.sort(function (a, b) { return b.rank - a.rank; }).forEach(function (l) {
+        var strong = l.rank >= 70;
+        ctx.font = (strong ? "600 " : "") + (strong ? 12 : 11) + "px " + faceStack;
+        var t = l.n.name;
+        var tw = ctx.measureText(t).width;
+        var box = { x: l.p.x - tw / 2 - 3, y: l.p.y - l.r - 15, w: tw + 6, h: 14 };
+
+        if (box.x + box.w < -20 || box.x > w + 20 || box.y + box.h < -20 || box.y > h + 20) return;
+        for (var i = 0; i < taken.length; i++) {
+          var o = taken[i];
+          if (box.x < o.x + o.w && o.x < box.x + box.w &&
+              box.y < o.y + o.h && o.y < box.y + box.h) return;
+        }
+        taken.push(box);
+
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = css.panel;
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = strong ? css.text : css["text-dim"];
+        ctx.fillText(t, box.x + 3, box.y + 11);
+      });
+    }
+
+    function pick(mx, my) {
+      var best = null, bestD = 18 * 18;
+      G.keys.forEach(function (k) {
+        if (!inFocus(k)) return;
+        var p = toScreen(sim[k]);
+        var dx = p.x - mx, dy = p.y - my;
+        var d2 = dx * dx + dy * dy;
+        if (d2 < bestD) { bestD = d2; best = k; }
+      });
+      return best;
+    }
+
+    var drag = null;
+
+    cv.addEventListener("pointerdown", function (ev) {
+      cv.setPointerCapture(ev.pointerId);
+      drag = { x: ev.offsetX, y: ev.offsetY, moved: false };
+      cv.classList.add("is-drag");
+    });
+
+    cv.addEventListener("pointermove", function (ev) {
+      if (drag) {
+        var dx = ev.offsetX - drag.x, dy = ev.offsetY - drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+        view.tx += dx; view.ty += dy;
+        drag.x = ev.offsetX; drag.y = ev.offsetY;
+        draw();
+        return;
+      }
+      var h = pick(ev.offsetX, ev.offsetY);
+      if (h !== hover) { hover = h; draw(); }
+    });
+
+    cv.addEventListener("pointerup", function (ev) {
+      var wasDrag = drag && drag.moved;
+      drag = null;
+      cv.classList.remove("is-drag");
+      if (wasDrag) return;
+      var k = pick(ev.offsetX, ev.offsetY);
+      select(k);
+    });
+
+    cv.addEventListener("pointerleave", function () {
+      drag = null;
+      cv.classList.remove("is-drag");
+      if (hover) { hover = null; draw(); }
+    });
+
+    cv.addEventListener("wheel", function (ev) {
+      ev.preventDefault();
+      var f = Math.exp(-ev.deltaY * 0.0015);
+      var nk = Math.max(0.12, Math.min(6, view.k * f));
+      f = nk / view.k;
+      view.tx = ev.offsetX - (ev.offsetX - view.tx) * f;
+      view.ty = ev.offsetY - (ev.offsetY - view.ty) * f;
+      view.k = nk;
+      draw();
+    }, { passive: false });
+
+    // -------------------------------------------------------------- rail
+
+    function renderRail() {
+      var host = document.getElementById("dep-list");
+      host.textContent = "";
+
+      G.direct.forEach(function (m) {
+        var mod = G.mods[m] || {};
+        var t = G.tally[m];
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "dep";
+        b.setAttribute("aria-pressed", state.focus === m ? "true" : "false");
+        if (!t.closure) b.disabled = true;
+
+        var exW = (t.exclusive / G.maxClosure) * 100;
+        var shW = ((t.closure - t.exclusive) / G.maxClosure) * 100;
+        var tag = m === G.mainmod ? '<span class="dep-tag is-ours">ours</span>'
+                : !mod.pkgs ? '<span class="dep-tag">unused here</span>'
+                : mod.bump ? '<span class="dep-tag is-bump">bumped</span>'
+                : "";
+
+        b.innerHTML =
+          '<span class="dep-top">' +
+            '<span class="dep-name"></span>' +
+            '<span class="dep-ver"></span>' + tag +
+            '<span class="dep-n">' + t.closure + "</span>" +
+          "</span>" +
+          '<span class="dep-bar">' +
+            '<i class="ex" style="width:' + exW.toFixed(2) + '%"></i>' +
+            '<i class="sh" style="width:' + shW.toFixed(2) + '%"></i>' +
+          "</span>" +
+          '<span class="dep-legend">' +
+            "<span>" + t.exclusive + " only here</span>" +
+            "<span>" + (t.closure - t.exclusive) + " shared</span>" +
+          "</span>";
+
+        b.querySelector(".dep-name").textContent = modLabel(m);
+        b.querySelector(".dep-ver").textContent = shortVer(mod.v);
+
+        b.addEventListener("click", function () { focusModule(m); });
+        host.appendChild(b);
+      });
+
+      var note = document.getElementById("unbuilt");
+      note.textContent = G.unbuilt.length
+        ? "Required and checksummed in go.sum, and this target compiles nothing of: "
+          + G.unbuilt.map(modLabel).join(", ") + "."
+        : "";
+    }
+
+    function focusModule(m) {
+      state.focus = state.focus === m ? null : m;
+      state.sel = null;
+      renderRail();
+      renderTree();
+      renderTable();
+      renderDetail();
+      draw();
+    }
+
+    // -------------------------------------------------------------- tree
+
+    function childrenOf(key) {
+      return G.nodes[key].out.slice().sort(function (a, b) {
+        if ((a.kind === "std") !== (b.kind === "std")) return a.kind === "std" ? 1 : -1;
+        return a.to.localeCompare(b.to);
+      });
+    }
+
+    function renderTree() {
+      var host = document.getElementById("view-tree");
+      host.textContent = "";
+      var wrap = document.createElement("div");
+      wrap.className = "tw";
+
+      var seen = {};
+      var lines = 0;
+
+      function walk(key, prefix, connector, kind) {
+        if (lines++ > 4000) return;
+        var n = G.nodes[key];
+        var repeat = seen[key];
+        seen[key] = true;
+
+        var row = document.createElement("span");
+        row.className = "row" + (n.std ? " is-std" : "") +
+                        (state.sel === key ? " is-sel" : "");
+
+        row.appendChild(document.createTextNode(prefix + connector));
+
+        var hit = document.createElement("button");
+        hit.type = "button";
+        hit.className = "row-hit";
+        hit.textContent = key;
+        hit.addEventListener("click", function () { select(key); });
+        row.appendChild(hit);
+
+        // the version belongs to the module, so it is worth printing once per
+        // module rather than against every one of its packages
+        var mod = modOf(key);
+        if (mod.v && !n.std && !n.own && G.nodes[key].mod === key) {
+          var meta = document.createElement("span");
+          meta.className = "v";
+          meta.textContent = " " + shortVer(mod.v);
+          row.appendChild(meta);
+        }
+
+        if (isBumped(n)) {
+          var bump = document.createElement("span");
+          bump.className = "dup";
+          bump.textContent = " ○ bumped to " + mod.bump.sel;
+          row.appendChild(bump);
+        }
+        if (repeat) {
+          var st = document.createElement("span");
+          st.className = "note";
+          st.textContent = " (*)";
+          row.appendChild(st);
+        }
+
+        row.appendChild(document.createTextNode("\n"));
+        wrap.appendChild(row);
+
+        if (repeat) return;
+
+        var kids = childrenOf(key);
+        kids.forEach(function (e, i) {
+          var last = i === kids.length - 1;
+          walk(e.to, prefix + (connector ? (connector.charAt(0) === "└" ? "    " : "│   ") : ""),
+               last ? "└── " : "├── ", e.kind);
+        });
+      }
+
+      // a module is not a package, so focusing one roots the tree at each of the
+      // packages of it that something outside imports
+      if (state.focus) entriesOf(state.focus).forEach(function (k) { walk(k, "", "", "pkg"); });
+      else walk(G.root, "", "", "pkg");
+
+      host.appendChild(wrap);
+    }
+
+    // ------------------------------------------------------------- table
+
+    var COLS = [
+      { id: "name", label: "Package", num: false },
+      { id: "mod", label: "Module", num: false },
+      { id: "kind", label: "Kind", num: false },
+      { id: "depth", label: "Imports deep", num: true },
+      { id: "owners", label: "Reached via", num: false },
+      { id: "in", label: "Imported by", num: true },
+      { id: "files", label: "Files", num: true },
+      { id: "lic", label: "License", num: false }
+    ];
+
+    function sortValue(n, col) {
+      switch (col) {
+        case "name": return n.key;
+        case "mod": return n.own ? "" : n.mod;
+        case "kind": return n.own ? 0 : n.std ? 2 : 1;
+        case "depth": return isFinite(n.depth) ? n.depth : 99;
+        case "owners": return n.owners.length;
+        case "in": return n.in.length;
+        case "files": return n.files;
+        case "lic": return modOf(n.key).lic || "￿";
+      }
+      return 0;
+    }
+
+    function renderTable() {
+      var host = document.getElementById("view-table");
+      host.textContent = "";
+
+      var rows = G.keys.filter(function (k) {
+        if (k === G.root) return false;
+        if (!inFocus(k)) return false;
+        if (state.query && k.toLowerCase().indexOf(state.query) === -1) return false;
+        return true;
+      }).sort(function (a, b) {
+        var va = sortValue(G.nodes[a], state.sort.col);
+        var vb = sortValue(G.nodes[b], state.sort.col);
+        if (va < vb) return -state.sort.dir;
+        if (va > vb) return state.sort.dir;
+        return a.localeCompare(b);
+      });
+
+      var table = document.createElement("table");
+      var thead = document.createElement("thead");
+      var htr = document.createElement("tr");
+
+      COLS.forEach(function (c) {
+        var th = document.createElement("th");
+        th.textContent = c.label;
+        if (c.num) th.className = "num";
+        if (state.sort.col === c.id) {
+          th.setAttribute("aria-sort", state.sort.dir === 1 ? "ascending" : "descending");
+          th.textContent = c.label + (state.sort.dir === 1 ? " ↑" : " ↓");
+        }
+        th.addEventListener("click", function () {
+          if (state.sort.col === c.id) state.sort.dir *= -1;
+          else state.sort = { col: c.id, dir: c.num ? -1 : 1 };
+          renderTable();
+        });
+        htr.appendChild(th);
+      });
+
+      thead.appendChild(htr);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+
+      rows.forEach(function (k) {
+        var n = G.nodes[k];
+        var mod = modOf(k);
+        var tr = document.createElement("tr");
+        if (state.sel === k) tr.className = "is-sel";
+
+        var td1 = document.createElement("td");
+        td1.className = "cell-name";
+        td1.textContent = k;
+        td1.addEventListener("click", function () { select(k); });
+        tr.appendChild(td1);
+
+        var td2 = document.createElement("td");
+        td2.className = "muted";
+        td2.textContent = n.own ? "—" : modLabel(n.mod) +
+          (mod.v ? " " + shortVer(mod.v) : "");
+        tr.appendChild(td2);
+
+        var td3 = document.createElement("td");
+        td3.className = "cell-kind";
+        var pill = document.createElement("span");
+        pill.className = "pill " + (n.own ? "p-own" : n.std ? "p-std" : "p-third");
+        pill.textContent = n.own ? "ours" : n.std ? "std" : "third-party";
+        td3.appendChild(pill);
+        if (isBumped(n)) {
+          td3.appendChild(document.createTextNode(" "));
+          var dp = document.createElement("span");
+          dp.className = "pill p-dup";
+          dp.textContent = "bumped";
+          td3.appendChild(dp);
+        }
+        tr.appendChild(td3);
+
+        var td4 = document.createElement("td");
+        td4.className = "num muted";
+        td4.textContent = isFinite(n.depth) ? n.depth : "—";
+        tr.appendChild(td4);
+
+        var td5 = document.createElement("td");
+        td5.className = "muted";
+        td5.textContent = n.owners.map(modLabel).join(", ");
+        tr.appendChild(td5);
+
+        var td6 = document.createElement("td");
+        td6.className = "num muted";
+        td6.textContent = n.in.length;
+        tr.appendChild(td6);
+
+        var td7 = document.createElement("td");
+        td7.className = "num muted";
+        td7.textContent = n.files;
+        tr.appendChild(td7);
+
+        var td8 = document.createElement("td");
+        td8.className = "muted";
+        td8.textContent = mod.lic || "—";
+        tr.appendChild(td8);
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      host.appendChild(table);
+    }
+
+    // ------------------------------------------------------------ detail
+
+    function chipRow(keys, label, attr, text) {
+      if (!keys.length) return "";
+      return "<dt>" + label + "</dt><dd><span class='chips'>" +
+        keys.map(function (k) {
+          return '<button type="button" class="chip" ' + attr + '="' +
+            escapeHtml(k) + '">' + escapeHtml(text(k)) + "</button>";
+        }).join("") + "</span></dd>";
+    }
+
+    function renderDetail() {
+      var host = document.getElementById("detail");
+
+      if (!state.sel || !G.nodes[state.sel]) {
+        host.innerHTML =
+          '<p class="detail-empty">Pick a package in the graph, tree or table to see who ' +
+          "imports it and what it imports itself. Pick a module in the left rail to narrow " +
+          "every view to just what that module reaches.</p>";
+        return;
+      }
+
+      var n = G.nodes[state.sel];
+      var mod = modOf(n.key);
+      var parents = n.in.map(function (e) { return e.from; }).sort();
+      var kids = n.out.map(function (e) { return e.to; }).sort();
+
+      var html = '<button type="button" class="detail-close" aria-label="Close">×</button>' +
+        "<h3>" + escapeHtml(n.name) + (mod.v && !n.own ? " <span>" + escapeHtml(mod.v) +
+        "</span>" : "") + "</h3>";
+
+      if (n.doc) html += '<p class="desc">' + escapeHtml(n.doc) + "</p>";
+
+      html += "<dl>";
+      html += "<dt>Import</dt><dd>" + escapeHtml(n.key) + "</dd>";
+      html += "<dt>Kind</dt><dd>" +
+        (n.key === G.root ? "the main package"
+          : n.own ? "our own code"
+          : n.std ? "standard library"
+          : "third-party") + "</dd>";
+
+      // a module's own root package would only say the same thing twice
+      if (!n.std && !n.own && n.mod !== n.key) {
+        html += "<dt>Module</dt><dd>" + escapeHtml(n.mod) + "</dd>";
+      }
+
+      if (isBumped(n)) {
+        html += "<dt>Bumped</dt><dd style='color:var(--amber)'>" +
+          escapeHtml(mod.bump.sel) + " selected; " +
+          mod.bump.req.map(function (r) {
+            return escapeHtml(modLabel(r[0]) + " asks for " + r[1]);
+          }).join(", ") + "</dd>";
+      }
+
+      html += "<dt>Depth</dt><dd>" + (isFinite(n.depth) ? n.depth : "—") +
+        " imports deep from main</dd>";
+      html += "<dt>Files</dt><dd>" + n.files + " .go files</dd>";
+
+      if (n.owners.length && n.key !== G.root) {
+        html += chipRow(n.owners, n.owners.length === 1 ? "Only via" : "Reached via",
+                        "data-mod", modLabel);
+      }
+
+      html += chipRow(parents, "Imported by", "data-key", function (k) { return G.nodes[k].name; });
+      html += chipRow(kids, "Imports", "data-key", function (k) { return G.nodes[k].name; });
+
+      if (mod.lic) html += "<dt>License</dt><dd>" + escapeHtml(mod.lic) + "</dd>";
+      html += '<dt>Docs</dt><dd><a href="https://pkg.go.dev/' + escapeHtml(n.key) +
+        '" target="_blank" rel="noopener">pkg.go.dev</a>';
+      if (mod.repo) {
+        html += ' &middot; <a href="' + escapeHtml(mod.repo) +
+          '" target="_blank" rel="noopener">' +
+          escapeHtml(mod.repo.replace(/^https?:\/\//, "")) + "</a>";
+      }
+      html += "</dd></dl>";
+
+      host.innerHTML = html;
+
+      host.querySelector(".detail-close").addEventListener("click", function () {
+        select(null);
+      });
+      Array.prototype.forEach.call(host.querySelectorAll(".chip"), function (c) {
+        var key = c.getAttribute("data-key");
+        c.addEventListener("click", function () {
+          if (key) select(key);
+          else focusModule(c.getAttribute("data-mod"));
+        });
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    }
+
+    // ------------------------------------------------------------ wiring
+
+    function select(key) {
+      state.sel = key || null;
+      renderDetail();
+      renderTree();
+      renderTable();
+      draw();
+    }
+
+    function renderCounts() {
+      document.getElementById("c-total").textContent = G.stats.pkgs;
+      document.getElementById("c-third").textContent = G.stats.third;
+      document.getElementById("c-std").textContent = G.stats.std;
+      document.getElementById("c-mods").textContent = G.stats.mods;
+    }
+
+    function rebuild() {
+      state.focus = null;
+      state.sel = null;
+      hover = null;
+      G = buildModel(state.target, state.std);
+      sim = layout();
+      needFit = true;
+      renderCounts();
+      renderRail();
+      renderTree();
+      renderTable();
+      renderDetail();
+      resize();
+    }
+
+    function press(bar, b) {
+      Array.prototype.forEach.call(bar.querySelectorAll("button"), function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+    }
+
+    document.getElementById("target-switch").addEventListener("click", function (ev) {
+      var b = ev.target.closest("button[data-target]");
+      if (!b) return;
+      press(this, b);
+      state.target = b.getAttribute("data-target");
+      rebuild();
+    });
+
+    document.getElementById("std-switch").addEventListener("click", function (ev) {
+      var b = ev.target.closest("button[data-std]");
+      if (!b) return;
+      press(this, b);
+      state.std = b.getAttribute("data-std") === "1";
+      rebuild();
+    });
+
+    document.getElementById("view-switch").addEventListener("click", function (ev) {
+      var b = ev.target.closest("button[data-view]");
+      if (!b) return;
+      press(this, b);
+      state.view = b.getAttribute("data-view");
+      ["graph", "tree", "table"].forEach(function (v) {
+        document.getElementById("view-" + v).classList.toggle("is-on", v === state.view);
+      });
+      if (state.view === "graph") resize();
+    });
+
+    document.getElementById("q").addEventListener("input", function () {
+      state.query = this.value.trim().toLowerCase();
+      renderTable();
+      draw();
+    });
+
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") {
+        if (state.sel) select(null);
+        else if (state.focus) {
+          state.focus = null;
+          renderRail(); renderTree(); renderTable(); draw();
+        }
+      }
+    });
+
+    readTheme();
+    rebuild();
+
+    new ResizeObserver(function () {
+      if (state.view === "graph") resize();
+    }).observe(document.querySelector(".stage-body"));
+
+    resize();
+
+    var reTheme = function () { readTheme(); draw(); };
+    if (window.matchMedia) {
+      var mq = window.matchMedia("(prefers-color-scheme: dark)");
+      if (mq.addEventListener) mq.addEventListener("change", reTheme);
+    }
+    new MutationObserver(reTheme).observe(document.documentElement, {
+      attributes: true, attributeFilter: ["data-theme", "class", "style"]
+    });
+  })();
+</script>
