@@ -11,6 +11,13 @@ Win32 on Windows.
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
 
+## Download
+
+Prebuilt binaries are available directly from GitHub on each
+[release page](https://github.com/Xpra-org/go-xpra/releases). Linux packages are also available
+from the Xpra repositories under the package name `go-xpra`; see the
+[Xpra download setup instructions](https://github.com/Xpra-org/xpra/wiki/Download).
+
 ```shell
 go build ./cmd/go-xpra
 
