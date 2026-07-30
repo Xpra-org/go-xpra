@@ -10,7 +10,12 @@ override_dh_auto_build:
 	go build -trimpath -ldflags="-s -w" -o go-xpra ./cmd/go-xpra
 
 override_dh_auto_test:
+	desktop-file-validate packaging/org.xpra.go-xpra.desktop
 	go test ./...
 
 override_dh_auto_install:
 	install -Dpm 0755 go-xpra debian/go-xpra/usr/bin/go-xpra
+	install -Dpm 0644 packaging/org.xpra.go-xpra.desktop \
+		debian/go-xpra/usr/share/applications/org.xpra.go-xpra.desktop
+	install -Dpm 0644 xpra.png \
+		debian/go-xpra/usr/share/pixmaps/go-xpra.png

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=go-xpra
+GenericName=Remote Application Client
+Comment=Connect to an Xpra server
+TryExec=go-xpra
+Exec=go-xpra
+Icon=go-xpra
+Terminal=false
+Categories=Network;RemoteAccess;
+Keywords=Xpra;Remote;Desktop;
+StartupNotify=false

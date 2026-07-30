@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Antoine Martin <antoine@xpra.org>
 Build-Depends:
  debhelper-compat (= 13),
+ desktop-file-utils,
  golang-go (>= 2:1.26~1),
 Standards-Version: 4.7.2
 Homepage: https://github.com/Xpra-org/go-xpra
