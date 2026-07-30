@@ -150,7 +150,7 @@ func (s *sshStream) Close() error {
 	s.closeOnce.Do(func() {
 		stdinErr := s.stdin.Close()
 		stdoutErr := s.stdout.Close()
-		if s.command.Process != nil {
+		if s.command.Process != nil && s.command.ProcessState == nil {
 			if err := s.command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 				s.closeErr = errors.Join(s.closeErr, fmt.Errorf("stopping ssh: %w", err))
 			}
