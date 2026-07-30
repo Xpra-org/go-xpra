@@ -1,6 +1,7 @@
 package client
 
 import (
+	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/rencodeplus"
 	"github.com/Xpra-org/go-xpra/ui"
 )
@@ -26,11 +27,27 @@ func (c *Client) handleMotion(e ui.Motion) {
 
 // handleButton forwards a button press or release.
 //
-// Buttons 4 to 7 are the scroll wheel, which needs no special handling: xpra
-// forwards them as buttons and the remote X server interprets them the same way.
+// Backends represent each wheel notch as a press and release of buttons 4 to 7.
+// Xpra's wheel packet represents the whole notch, so only the press is sent.
 func (c *Client) handleButton(e ui.Button) {
 	wid, _, ok := c.lookup(e.Window)
 	if !ok {
+		return
+	}
+	if e.Button >= 4 && e.Button <= 7 {
+		if !e.Pressed {
+			return
+		}
+		packetType := "pointer-wheel"
+		if protocol.BackwardsCompatible {
+			packetType = "wheel-motion"
+		}
+		distance := 1000
+		if e.Button == 5 || e.Button == 7 {
+			distance = -distance
+		}
+		c.send(packetType, wid, e.Button, distance,
+			[]any{e.X, e.Y}, []string{}, []int{}, rencodeplus.Dict{})
 		return
 	}
 	c.send("pointer-button", deviceID, 0, wid, e.Button, e.Pressed,

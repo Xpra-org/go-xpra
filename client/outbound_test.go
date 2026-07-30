@@ -168,3 +168,59 @@ func TestWindowDrawAckUsesTrunkShapeWithoutCompatibility(t *testing.T) {
 		t.Errorf("strict window-draw-ack has the wrong shape: %v", drawAck)
 	}
 }
+
+func TestWheelPacketTypeAndShape(t *testing.T) {
+	tests := []struct {
+		name                string
+		backwardsCompatible bool
+		button              int
+		distance            int64
+		packetType          string
+	}{
+		{"compatible", true, 4, 1000, "wheel-motion"},
+		{"modern", false, 7, -1000, "pointer-wheel"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setBackwardsCompatible(t, test.backwardsCompatible)
+			client, server, window := outboundHarness(t)
+			client.windows[7] = window
+			client.byLocal[window.id] = 7
+
+			event := ui.Button{
+				Window: window.id, Button: test.button, Pressed: true,
+				X: 12, Y: 22,
+			}
+			client.handleButton(event)
+			event.Pressed = false
+			client.handleButton(event)
+
+			wheel := receiveOutbound(t, server, test.packetType)
+			if len(wheel) != 8 {
+				t.Fatalf("%s has %d elements, want 8: %v", test.packetType, len(wheel), wheel)
+			}
+			if wheel.Int(1) != 7 || wheel.Int(2) != int64(test.button) || wheel.Int(3) != test.distance {
+				t.Errorf("%s header fields are wrong: %v", test.packetType, wheel)
+			}
+			if got := wheel[4]; !reflect.DeepEqual(got, []any{int64(12), int64(22)}) {
+				t.Errorf("%s pointer = %#v", test.packetType, got)
+			}
+			if got := wheel[5]; !reflect.DeepEqual(got, []any{}) {
+				t.Errorf("%s modifiers = %#v", test.packetType, got)
+			}
+			if got := wheel[6]; !reflect.DeepEqual(got, []any{}) {
+				t.Errorf("%s buttons = %#v", test.packetType, got)
+			}
+			if got := wheel.Dict(7); len(got) != 0 {
+				t.Errorf("%s properties = %#v", test.packetType, got)
+			}
+
+			// The wheel release was consumed, so the next packet must be this
+			// ordinary pointer button rather than a second wheel packet.
+			client.handleButton(ui.Button{
+				Window: window.id, Button: 1, Pressed: true, X: 12, Y: 22,
+			})
+			receiveOutbound(t, server, "pointer-button")
+		})
+	}
+}
