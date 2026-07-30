@@ -20,7 +20,7 @@ source_dir="$(basename "${GO_XPRA_TAR_GZ}" .tar.gz)"
 rm -rf -- "./${source_dir:?}"
 tar -xzf "${GO_XPRA_TAR_GZ}"
 pushd "./${source_dir}"
-ln -s ../go-xpra debian
+cp -a ../go-xpra debian
 
 mk-build-deps \
 	--install \
