@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+export CGO_ENABLED = 0
+export GOFLAGS = -mod=readonly -buildvcs=false
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	go build -trimpath -ldflags="-s -w" -o go-xpra ./cmd/go-xpra
+
+override_dh_auto_test:
+	go test ./...
+
+override_dh_auto_install:
+	install -Dpm 0755 go-xpra debian/go-xpra/usr/bin/go-xpra

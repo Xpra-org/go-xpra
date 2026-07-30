@@ -1,0 +1,5 @@
+go-xpra (0.2.1-1) UNRELEASED; urgency=medium
+
+  * Initial package.
+
+ -- Antoine Martin <antoine@xpra.org>  Thu, 30 Jul 2026 10:57:04 +0700

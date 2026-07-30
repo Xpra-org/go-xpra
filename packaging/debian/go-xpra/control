@@ -1,0 +1,25 @@
+Source: go-xpra
+Section: x11
+Priority: optional
+Maintainer: Antoine Martin <antoine@xpra.org>
+Build-Depends:
+ debhelper-compat (= 13),
+ golang-go (>= 2:1.26~1),
+Standards-Version: 4.7.2
+Homepage: https://github.com/Xpra-org/go-xpra
+Vcs-Git: https://github.com/Xpra-org/go-xpra.git
+Vcs-Browser: https://github.com/Xpra-org/go-xpra
+Rules-Requires-Root: no
+
+Package: go-xpra
+Architecture: any
+Depends:
+ ${misc:Depends},
+Recommends:
+ openssh-client,
+ pinentry-curses | pinentry,
+Suggests:
+ sshpass,
+Description: minimal Xpra client written in Go
+ go-xpra connects to an Xpra server over TCP, TLS, WebSocket, or SSH and
+ displays forwarded application windows on the local X11 or Wayland desktop.
