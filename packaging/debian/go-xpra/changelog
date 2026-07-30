@@ -12,6 +12,7 @@ go-xpra (0.2.1-1) UNRELEASED; urgency=medium
     remove duplicated asset functions
     add RPM and Debian packaging
     package the desktop launcher and icon
+    add and package the manual page
   * Network:
     add SSL support
     add the SSH subprocess transport

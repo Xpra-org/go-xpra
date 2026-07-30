@@ -42,6 +42,8 @@ install -Dpm 0644 packaging/%{desktop_id}.desktop \
     %{buildroot}%{_datadir}/applications/%{desktop_id}.desktop
 install -Dpm 0644 xpra.png \
     %{buildroot}%{_datadir}/pixmaps/%{name}.png
+install -Dpm 0644 packaging/%{name}.1 \
+    %{buildroot}%{_mandir}/man1/%{name}.1
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/%{desktop_id}.desktop
@@ -55,6 +57,7 @@ go test ./...
 %{_bindir}/%{name}
 %{_datadir}/applications/%{desktop_id}.desktop
 %{_datadir}/pixmaps/%{name}.png
+%{_mandir}/man1/%{name}.1*
 
 %changelog
 * Thu Jul 30 2026 Antoine Martin <antoine@xpra.org> 0.2.1-1
@@ -70,6 +73,7 @@ go test ./...
    remove duplicated asset functions
    add RPM and Debian packaging
    package the desktop launcher and icon
+   add and package the manual page
 - Network:
    add SSL support
    add the SSH subprocess transport

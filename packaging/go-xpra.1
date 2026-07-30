@@ -1,0 +1,181 @@
+.TH GO-XPRA 1 "30 July 2026" "go-xpra 0.2.1" "User Commands"
+.SH NAME
+go-xpra \- minimal Xpra client
+.SH SYNOPSIS
+.B go-xpra
+.br
+.B go-xpra
+.RI [ options ]
+.BR tcp:// [ username [ : password ]@] host [ : port ]/
+.br
+.B go-xpra
+.RI [ options ]
+.BR ssl:// [ username [ : password ]@] host [ : port ]/
+.br
+.B go-xpra
+.RI [ options ]
+.BR ws:// [ username [ : password ]@] host [ : port ]/[ path ][? query ]
+.br
+.B go-xpra
+.RI [ options ]
+.BR wss:// [ username [ : password ]@] host [ : port ]/[ path ][? query ]
+.br
+.B go-xpra
+.RI [ options ]
+.BR ssh:// [ username [ : password ]@] host [ : port ]/[ display ]
+.SH DESCRIPTION
+.B go-xpra
+connects to an Xpra server and displays its forwarded application windows on
+the local desktop.
+It supports plain TCP, TLS, WebSocket, secure WebSocket, and SSH connections.
+.PP
+When invoked without a URL,
+.B go-xpra
+opens a connection dialog for the protocol, credentials, host, port, and
+protocol-specific path or display.
+.PP
+The default ports are 14500 for TCP and TLS, 80 for WebSocket, 443 for secure
+WebSocket, and 22 for SSH.
+TLS connections verify the server certificate and host name against the system
+trust store by default.
+.PP
+SSH connections use the system
+.BR ssh (1)
+client and run
+.B xpra _proxy
+on the remote host.
+The remote host must have
+.B xpra
+in its
+.BR PATH .
+OpenSSH configuration, identities, agents, jump hosts, and host key handling
+apply normally.
+.SH OPTIONS
+.TP
+.BR \-\-backend " " auto | x11 | wayland
+Select the Linux display backend.
+The default,
+.BR auto ,
+uses X11 when
+.B DISPLAY
+is set and otherwise tries Wayland when
+.B WAYLAND_DISPLAY
+is set.
+This option is available on Linux only.
+.TP
+.BR \-\-ssl\-ca\-cert " " file
+Add the PEM certificates in
+.I file
+to the system certificate authorities trusted for
+.B ssl://
+and
+.B wss://
+connections.
+.TP
+.B \-\-ssl\-insecure
+Disable certificate and host name verification for
+.B ssl://
+and
+.B wss://
+connections.
+This is intended only for local testing.
+It cannot be combined with
+.BR \-\-ssl\-ca\-cert .
+.TP
+.B \-v
+Log packet and window event details.
+.TP
+.B \-\-version
+Print the program version and exit.
+.TP
+.B \-\-help
+Print command usage and exit.
+.SH ENVIRONMENT
+.TP
+.B XPRA_PASSWORD
+Xpra protocol password to use when it is not present in the connection URL.
+If this variable is unset and the server requests authentication,
+.B go-xpra
+prompts for the password.
+.TP
+.B XPRA_BACKWARDS_COMPATIBLE
+Set to
+.B 0
+to accept only Xpra 6.5 and later packet types.
+Legacy packet reception is enabled by default.
+.TP
+.B DISPLAY
+X display used by the X11 backend.
+Its presence also gives X11 priority when
+.B \-\-backend auto
+is used.
+.TP
+.B WAYLAND_DISPLAY
+Wayland compositor socket used by the Wayland backend.
+.TP
+.BR USER ", " USERNAME
+Local user name used when the connection URL omits one.
+.TP
+.B PATH
+Used to locate
+.BR ssh ,
+.BR sshpass ,
+and
+.BR pinentry .
+.SH AUTHENTICATION
+For TCP, TLS, and WebSocket connections, a password omitted from the URL is
+read from
+.B XPRA_PASSWORD
+or requested interactively.
+On Linux,
+.B pinentry
+is tried first, followed by a hidden terminal prompt.
+.PP
+SSH authentication is handled by the system SSH client.
+A password in an SSH URL is the SSH login password and requires
+.BR sshpass (1);
+it is not reused for a separate Xpra protocol challenge.
+Agent or key authentication is recommended for graphical launches.
+.PP
+Passwords embedded in URLs may be exposed through command-line inspection or
+shell history.
+Prefer
+.B XPRA_PASSWORD
+for an Xpra protocol password and normal SSH key or agent authentication for
+SSH.
+.SH EXAMPLES
+Connect to the default TCP port on the local host:
+.PP
+.RS
+.B go-xpra tcp://127.0.0.1/
+.RE
+.PP
+Trust a private certificate authority for a TLS connection:
+.PP
+.RS
+.B go-xpra \-\-ssl\-ca\-cert /path/to/ca.pem ssl://server.example.com/
+.RE
+.PP
+Connect through a secure WebSocket reverse proxy:
+.PP
+.RS
+.B go-xpra wss://server.example.com/xpra/
+.RE
+.PP
+Connect to display 100 through SSH:
+.PP
+.RS
+.B go-xpra ssh://alice@server.example.com/100
+.RE
+.SH EXIT STATUS
+.B go-xpra
+exits with status 0 after a requested informational action or a clean session,
+1 when a connection or runtime operation fails, and 2 for invalid command-line
+usage.
+.SH SEE ALSO
+.BR ssh (1),
+.BR sshpass (1),
+.BR xpra (1)
+.PP
+Project documentation:
+.B https://github.com/Xpra-org/go-xpra

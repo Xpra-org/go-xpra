@@ -19,3 +19,5 @@ override_dh_auto_install:
 		debian/go-xpra/usr/share/applications/org.xpra.go-xpra.desktop
 	install -Dpm 0644 xpra.png \
 		debian/go-xpra/usr/share/pixmaps/go-xpra.png
+	install -Dpm 0644 packaging/go-xpra.1 \
+		debian/go-xpra/usr/share/man/man1/go-xpra.1
