@@ -103,6 +103,25 @@ type Display interface {
 	Close()
 }
 
+// Clipboard is the text clipboard exposed by a desktop backend.
+//
+// It is deliberately smaller than Display because clipboard support is an
+// optional desktop capability: a Wayland compositor may omit the data-device
+// manager, and an unusually old X server may have no XFixes extension.
+type Clipboard interface {
+	// SetText makes text the current contents of the ordinary desktop
+	// clipboard. Local changes arrive through Display.Events as
+	// ClipboardChange values.
+	SetText(text string) error
+}
+
+// ClipboardProvider is implemented by displays which know how to expose a
+// native clipboard. Clipboard returns nil when the desktop service needed for
+// it was not available at startup.
+type ClipboardProvider interface {
+	Clipboard() Clipboard
+}
+
 // Window is one forwarded xpra window shown on the local desktop.
 //
 // Coordinates are always those of the content area, in screen space: that is

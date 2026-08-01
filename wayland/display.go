@@ -59,6 +59,7 @@ type Display struct {
 	shm         *client.Shm
 	wmBase      *xdg_shell.WmBase
 	iconManager *toplevelIconManager
+	dataManager *dataDeviceManager
 	seat        *client.Seat
 	pointer     *client.Pointer
 	keyboard    *client.Keyboard
@@ -94,6 +95,8 @@ type Display struct {
 	ownedCursor   *ownedCursor
 	theme         *cursor.Theme
 	themeMissing  bool
+	clipboard     *clipboard
+	inputSerial   uint32
 
 	keys *keymap
 	mods uint32
@@ -158,6 +161,14 @@ func Open() (*Display, error) {
 		log.Printf("wayland: the compositor does not offer xdg-decoration, " +
 			"so windows will have no title bar")
 	}
+	if d.dataManager != nil && d.seat != nil {
+		clipboard, err := newClipboard(d, d.dataManager, d.seat)
+		if err != nil {
+			log.Printf("wayland: clipboard is unavailable: %v", err)
+		} else {
+			d.clipboard = clipboard
+		}
+	}
 	// A client that does not answer a ping is killed as unresponsive.
 	d.wmBase.SetPingHandler(func(e xdg_shell.WmBasePingEvent) {
 		if err := d.wmBase.Pong(e.Serial); err != nil {
@@ -173,6 +184,10 @@ func Open() (*Display, error) {
 // Events returns the channel of incoming events. It is closed when the
 // connection to the compositor ends.
 func (d *Display) Events() <-chan ui.Event { return d.events }
+
+// Clipboard returns the wl_data_device clipboard, or nil when the compositor
+// does not advertise that optional global.
+func (d *Display) Clipboard() ui.Clipboard { return d.clipboard }
 
 // Bell does nothing. Wayland has no bell protocol and no way to reach the
 // desktop's sound theme that does not go through C libraries, so a remote
@@ -193,6 +208,7 @@ func (d *Display) Close() {
 func (d *Display) shutdown() {
 	d.once.Do(func() {
 		close(d.done)
+		d.releaseClipboard()
 		d.releaseCursor()
 		d.ctx.Close()
 	})
@@ -219,6 +235,9 @@ func (d *Display) global(e client.RegistryGlobalEvent) {
 	case "xdg_toplevel_icon_manager_v1":
 		d.iconManager = newToplevelIconManager(d.ctx)
 		d.bind(e, d.iconManager, iconVersion)
+	case "wl_data_device_manager":
+		d.dataManager = newDataDeviceManager(d.ctx)
+		d.bind(e, d.dataManager, 3)
 	case "wl_seat":
 		if d.seat != nil {
 			// One seat is all a client showing one session can use; a second

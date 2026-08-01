@@ -21,40 +21,54 @@ var (
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 	procBeep            = kernel32.NewProc("Beep")
+	procGlobalAlloc     = kernel32.NewProc("GlobalAlloc")
+	procGlobalFree      = kernel32.NewProc("GlobalFree")
+	procGlobalLock      = kernel32.NewProc("GlobalLock")
+	procGlobalUnlock    = kernel32.NewProc("GlobalUnlock")
+	procGlobalSize      = kernel32.NewProc("GlobalSize")
 
-	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
-	procDestroyWindow    = user32.NewProc("DestroyWindow")
-	procDefWindowProc    = user32.NewProc("DefWindowProcW")
-	procSendMessage      = user32.NewProc("SendMessageW")
-	procGetMessage       = user32.NewProc("GetMessageW")
-	procDispatchMessage  = user32.NewProc("DispatchMessageW")
-	procPostMessage      = user32.NewProc("PostMessageW")
-	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
-	procShowWindow       = user32.NewProc("ShowWindow")
-	procSetWindowText    = user32.NewProc("SetWindowTextW")
-	procSetWindowPos     = user32.NewProc("SetWindowPos")
-	procAdjustWindowRect = user32.NewProc("AdjustWindowRectEx")
-	procGetClientRect    = user32.NewProc("GetClientRect")
-	procClientToScreen   = user32.NewProc("ClientToScreen")
-	procInvalidateRect   = user32.NewProc("InvalidateRect")
-	procBeginPaint       = user32.NewProc("BeginPaint")
-	procEndPaint         = user32.NewProc("EndPaint")
-	procLoadCursor       = user32.NewProc("LoadCursorW")
-	procSetCursor        = user32.NewProc("SetCursor")
-	procCreateIcon       = user32.NewProc("CreateIconIndirect")
-	procDestroyIcon      = user32.NewProc("DestroyIcon")
-	procDestroyCursor    = user32.NewProc("DestroyCursor")
-	procGetCursorPos     = user32.NewProc("GetCursorPos")
-	procWindowFromPoint  = user32.NewProc("WindowFromPoint")
-	procSetCapture       = user32.NewProc("SetCapture")
-	procReleaseCapture   = user32.NewProc("ReleaseCapture")
-	procGetKeyState      = user32.NewProc("GetKeyState")
-	procGetKeyboardState = user32.NewProc("GetKeyboardState")
-	procToUnicode        = user32.NewProc("ToUnicode")
-	procMapVirtualKey    = user32.NewProc("MapVirtualKeyW")
-	procSetProcessDPI    = user32.NewProc("SetProcessDPIAware")
-	procSetDPIContext    = user32.NewProc("SetProcessDpiAwarenessContext")
+	procRegisterClassEx               = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx                = user32.NewProc("CreateWindowExW")
+	procDestroyWindow                 = user32.NewProc("DestroyWindow")
+	procDefWindowProc                 = user32.NewProc("DefWindowProcW")
+	procSendMessage                   = user32.NewProc("SendMessageW")
+	procGetMessage                    = user32.NewProc("GetMessageW")
+	procDispatchMessage               = user32.NewProc("DispatchMessageW")
+	procPostMessage                   = user32.NewProc("PostMessageW")
+	procPostQuitMessage               = user32.NewProc("PostQuitMessage")
+	procShowWindow                    = user32.NewProc("ShowWindow")
+	procSetWindowText                 = user32.NewProc("SetWindowTextW")
+	procSetWindowPos                  = user32.NewProc("SetWindowPos")
+	procAdjustWindowRect              = user32.NewProc("AdjustWindowRectEx")
+	procGetClientRect                 = user32.NewProc("GetClientRect")
+	procClientToScreen                = user32.NewProc("ClientToScreen")
+	procInvalidateRect                = user32.NewProc("InvalidateRect")
+	procBeginPaint                    = user32.NewProc("BeginPaint")
+	procEndPaint                      = user32.NewProc("EndPaint")
+	procLoadCursor                    = user32.NewProc("LoadCursorW")
+	procSetCursor                     = user32.NewProc("SetCursor")
+	procCreateIcon                    = user32.NewProc("CreateIconIndirect")
+	procDestroyIcon                   = user32.NewProc("DestroyIcon")
+	procDestroyCursor                 = user32.NewProc("DestroyCursor")
+	procGetCursorPos                  = user32.NewProc("GetCursorPos")
+	procWindowFromPoint               = user32.NewProc("WindowFromPoint")
+	procSetCapture                    = user32.NewProc("SetCapture")
+	procReleaseCapture                = user32.NewProc("ReleaseCapture")
+	procGetKeyState                   = user32.NewProc("GetKeyState")
+	procGetKeyboardState              = user32.NewProc("GetKeyboardState")
+	procToUnicode                     = user32.NewProc("ToUnicode")
+	procMapVirtualKey                 = user32.NewProc("MapVirtualKeyW")
+	procSetProcessDPI                 = user32.NewProc("SetProcessDPIAware")
+	procSetDPIContext                 = user32.NewProc("SetProcessDpiAwarenessContext")
+	procOpenClipboard                 = user32.NewProc("OpenClipboard")
+	procCloseClipboard                = user32.NewProc("CloseClipboard")
+	procEmptyClipboard                = user32.NewProc("EmptyClipboard")
+	procGetClipboardData              = user32.NewProc("GetClipboardData")
+	procSetClipboardData              = user32.NewProc("SetClipboardData")
+	procIsClipboardFormatAvailable    = user32.NewProc("IsClipboardFormatAvailable")
+	procAddClipboardFormatListener    = user32.NewProc("AddClipboardFormatListener")
+	procRemoveClipboardFormatListener = user32.NewProc("RemoveClipboardFormatListener")
+	procGetClipboardSequenceNumber    = user32.NewProc("GetClipboardSequenceNumber")
 
 	procSetDIBitsToDevice = gdi32.NewProc("SetDIBitsToDevice")
 	procCreateDIBSection  = gdi32.NewProc("CreateDIBSection")
@@ -114,6 +128,7 @@ const (
 	wmXButtonDown      = 0x020B
 	wmXButtonUp        = 0x020C
 	wmMouseHWheel      = 0x020E
+	wmClipboardUpdate  = 0x031D
 	wmApp              = 0x8000
 
 	htClient = 1
@@ -133,6 +148,9 @@ const (
 	// state, so that inspecting a key cannot swallow the next one. The flag
 	// arrived in Windows 10 1607 and is ignored by anything older.
 	toUnicodeNoState = 0x4
+	cfUnicodeText    = 13
+	gmemMoveable     = 0x0002
+	gmemZeroInit     = 0x0040
 )
 
 type point struct{ X, Y int32 }
@@ -236,6 +254,87 @@ func getModuleHandle() (syscall.Handle, error) {
 
 func beep(frequency, duration uint32) {
 	procBeep.Call(uintptr(frequency), uintptr(duration))
+}
+
+func globalAlloc(flags uint32, bytes uintptr) (syscall.Handle, error) {
+	r, _, err := procGlobalAlloc.Call(uintptr(flags), bytes)
+	if r == 0 {
+		return 0, fmt.Errorf("GlobalAlloc: %w", err)
+	}
+	return syscall.Handle(r), nil
+}
+
+func globalFree(memory syscall.Handle) { procGlobalFree.Call(uintptr(memory)) }
+
+func globalLock(memory syscall.Handle) (unsafe.Pointer, error) {
+	r, _, err := procGlobalLock.Call(uintptr(memory))
+	if r == 0 {
+		return nil, fmt.Errorf("GlobalLock: %w", err)
+	}
+	return unsafe.Pointer(r), nil
+}
+
+func globalUnlock(memory syscall.Handle) { procGlobalUnlock.Call(uintptr(memory)) }
+
+func globalSize(memory syscall.Handle) uintptr {
+	r, _, _ := procGlobalSize.Call(uintptr(memory))
+	return r
+}
+
+func openClipboard(owner syscall.Handle) error {
+	r, _, err := procOpenClipboard.Call(uintptr(owner))
+	if r == 0 {
+		return fmt.Errorf("OpenClipboard: %w", err)
+	}
+	return nil
+}
+
+func closeClipboard() { procCloseClipboard.Call() }
+
+func emptyClipboard() error {
+	r, _, err := procEmptyClipboard.Call()
+	if r == 0 {
+		return fmt.Errorf("EmptyClipboard: %w", err)
+	}
+	return nil
+}
+
+func getClipboardData(format uint32) (syscall.Handle, error) {
+	r, _, err := procGetClipboardData.Call(uintptr(format))
+	if r == 0 {
+		return 0, fmt.Errorf("GetClipboardData: %w", err)
+	}
+	return syscall.Handle(r), nil
+}
+
+func setClipboardData(format uint32, memory syscall.Handle) error {
+	r, _, err := procSetClipboardData.Call(uintptr(format), uintptr(memory))
+	if r == 0 {
+		return fmt.Errorf("SetClipboardData: %w", err)
+	}
+	return nil
+}
+
+func clipboardFormatAvailable(format uint32) bool {
+	r, _, _ := procIsClipboardFormatAvailable.Call(uintptr(format))
+	return r != 0
+}
+
+func addClipboardFormatListener(hwnd syscall.Handle) error {
+	r, _, err := procAddClipboardFormatListener.Call(uintptr(hwnd))
+	if r == 0 {
+		return fmt.Errorf("AddClipboardFormatListener: %w", err)
+	}
+	return nil
+}
+
+func removeClipboardFormatListener(hwnd syscall.Handle) {
+	procRemoveClipboardFormatListener.Call(uintptr(hwnd))
+}
+
+func clipboardSequenceNumber() uint32 {
+	r, _, _ := procGetClipboardSequenceNumber.Call()
+	return uint32(r)
 }
 
 func registerClassEx(class *wndClassEx) error {

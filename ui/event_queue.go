@@ -94,7 +94,7 @@ func (q *EventQueue) Pop() (Event, bool) {
 
 func isCoalescible(event Event) bool {
 	switch event.(type) {
-	case Configure, Motion:
+	case Configure, Motion, ClipboardChange:
 		return true
 	default:
 		return false
@@ -109,6 +109,9 @@ func canCoalesce(old, next Event) bool {
 	case Motion:
 		old, ok := old.(Motion)
 		return ok && old.Window == next.Window
+	case ClipboardChange:
+		_, ok := old.(ClipboardChange)
+		return ok
 	default:
 		return false
 	}

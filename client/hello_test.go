@@ -88,7 +88,7 @@ func TestChallengeReplyAcceptsSuffixedDigest(t *testing.T) {
 // treats as mandatory.
 func TestBuildHello(t *testing.T) {
 	setBackwardsCompatible(t, true)
-	caps := buildHello("")
+	caps := buildHello("", false)
 	encoded, err := rencodeplus.Encode([]any{"hello", caps})
 	if err != nil {
 		t.Fatalf("the hello does not encode: %v", err)
@@ -185,7 +185,7 @@ func TestBuildHello(t *testing.T) {
 
 func TestBuildHelloWithoutCompatibility(t *testing.T) {
 	setBackwardsCompatible(t, false)
-	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("")})
+	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false)})
 	if err != nil {
 		t.Fatalf("encoding hello: %v", err)
 	}
@@ -215,9 +215,29 @@ func TestBuildHelloWithoutCompatibility(t *testing.T) {
 	}
 }
 
+func TestBuildHelloClipboardCapability(t *testing.T) {
+	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", true)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := rencodeplus.Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clipboard := protocol.Packet(decoded.([]any)).Dict(1).Dict("clipboard")
+	if clipboard == nil || !clipboard.Bool("enabled") {
+		t.Fatal("clipboard capability is missing or disabled")
+	}
+	for _, key := range []string{"selections", "greedy", "want_targets", "preferred-targets"} {
+		if !clipboard.Has(key) {
+			t.Errorf("clipboard.%s is missing", key)
+		}
+	}
+}
+
 func TestBuildHelloUsesExplicitUsername(t *testing.T) {
 	t.Setenv("USER", "environment-user")
-	got := buildHello("url-user")
+	got := buildHello("url-user", false)
 	if username := helloString(got, "username"); username != "url-user" {
 		t.Errorf("username = %q, want url-user", username)
 	}
@@ -228,7 +248,7 @@ func TestBuildHelloUsesExplicitUsername(t *testing.T) {
 
 func TestBuildHelloFallsBackToEnvironmentUsername(t *testing.T) {
 	t.Setenv("USER", "environment-user")
-	got := buildHello("")
+	got := buildHello("", false)
 	if username := helloString(got, "username"); username != "environment-user" {
 		t.Errorf("username = %q, want environment-user", username)
 	}

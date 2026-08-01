@@ -36,8 +36,8 @@ const challengeSaltLen = 32
 // The shape here is load-bearing in ways that are not obvious, so the
 // non-obvious keys carry the server-side reference that explains them. Anything
 // not advertised is simply never sent to us, which is how this client avoids
-// having to handle icons, clipboard and audio at all.
-func buildHello(username string) rencodeplus.Dict {
+// having to handle unsupported packet families such as audio.
+func buildHello(username string, clipboard bool) rencodeplus.Dict {
 	caps := rencodeplus.Dict{
 		{Key: "version", Value: clientVersion},
 		{Key: "client_type", Value: "go"},
@@ -129,6 +129,15 @@ func buildHello(username string) rencodeplus.Dict {
 		// Advertising only one digest forces the server to choose it.
 		{Key: "digest", Value: []string{digestName}},
 		{Key: "salt-digest", Value: []string{digestName}},
+	}
+	if clipboard {
+		caps.Set("clipboard", rencodeplus.Dict{
+			{Key: "enabled", Value: true},
+			{Key: "selections", Value: clipboardSelections},
+			{Key: "greedy", Value: clipboardSelections},
+			{Key: "want_targets", Value: clipboardSelections},
+			{Key: "preferred-targets", Value: clipboardTargets},
+		})
 	}
 
 	if protocol.BackwardsCompatible {

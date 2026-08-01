@@ -108,6 +108,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
   override-redirect popups
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
 - pointer, keyboard and focus forwarding, with keys named the X11 way on every platform
+- bidirectional UTF-8 text clipboard synchronization on X11, native Wayland and Windows
 - server-provided PNG pointer cursors, including hotspot changes and default-cursor resets
 - server-provided per-window PNG icons on X11 and Windows, and on Wayland compositors supporting
   `xdg-toplevel-icon-v1`
@@ -121,8 +122,14 @@ Pass `--backend wayland` to use the compositor directly anyway.
 
 ## What it does not do
 
-Everything else: h264 and the other encodings, mmap, clipboard, audio, native notification
+Everything else: h264 and the other encodings, mmap, rich clipboard formats, audio, native notification
 popups, system tray, and keymap upload. Linux and Windows only — no macOS.
+
+Clipboard support deliberately covers only text in the ordinary `CLIPBOARD` selection. Images,
+HTML, file lists, and X11's `PRIMARY` and `SECONDARY` selections are not synchronized. Text is
+limited to 16 MiB, matching Xpra's clipboard packet limit. Clipboard setup is optional: a native
+Wayland compositor without `wl_data_device_manager`, or an X server without XFixes, still opens the
+session but does not advertise clipboard support.
 
 Anything not advertised in the hello is never sent by the server, so most of that list costs
 nothing to leave out.

@@ -4,6 +4,7 @@ package win32
 
 import (
 	"errors"
+	"log"
 	"runtime"
 	"sync"
 	"syscall"
@@ -50,7 +51,9 @@ type Display struct {
 	cursor  syscall.Handle
 	// cursorOwned distinguishes CreateIconIndirect cursors from the shared
 	// system arrow, which must never be destroyed by this process.
-	cursorOwned bool
+	cursorOwned        bool
+	clipboardSequence  uint32
+	clipboardAvailable bool
 
 	calls      chan func()
 	events     chan ui.Event
@@ -176,6 +179,9 @@ func (d *Display) windowThread(started chan<- error) {
 		return
 	}
 	defer func() {
+		if d.clipboardAvailable {
+			removeClipboardFormatListener(d.helper)
+		}
 		if d.cursorOwned {
 			destroyCursor(d.cursor)
 		}
@@ -223,6 +229,14 @@ func (d *Display) setup() error {
 		syscall.Handle(hwndMessage), instance)
 	if err != nil {
 		return err
+	}
+	if err := addClipboardFormatListener(d.helper); err != nil {
+		log.Printf("windows: clipboard is unavailable: %v", err)
+	} else {
+		d.clipboardAvailable = true
+		if text, available, err := d.readClipboardText(); err == nil && available {
+			d.emit(ui.ClipboardChange{Text: text})
+		}
 	}
 	return nil
 }
@@ -308,6 +322,9 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 		return 0
 	case wmStop:
 		postQuitMessage()
+		return 0
+	case wmClipboardUpdate:
+		d.clipboardChanged()
 		return 0
 	}
 

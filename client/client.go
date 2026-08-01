@@ -37,9 +37,19 @@ type Client struct {
 	display ui.Display
 	verbose bool
 
-	windows map[int64]ui.Window   // xpra window id -> local window
-	byLocal map[ui.WindowID]int64 // local window id -> xpra window id
-	focused int64
+	windows   map[int64]ui.Window   // xpra window id -> local window
+	byLocal   map[ui.WindowID]int64 // local window id -> xpra window id
+	focused   int64
+	clipboard ui.Clipboard
+
+	clipboardReady       bool
+	clipboardCanSend     bool
+	clipboardCanReceive  bool
+	clipboardKnown       bool
+	clipboardText        string
+	clipboardGeneration  uint64
+	nextClipboardRequest int64
+	clipboardRequests    map[int64]clipboardRequest
 
 	serverVersion  string
 	challengeSeen  bool
@@ -57,16 +67,21 @@ type PasswordPrompt func(string) (string, error)
 
 // New builds a client over an established connection and local display.
 func New(conn *protocol.Conn, display ui.Display, verbose bool, username, password string) *Client {
-	return &Client{
-		conn:     conn,
-		display:  display,
-		verbose:  verbose,
-		username: username,
-		password: password,
-		windows:  map[int64]ui.Window{},
-		byLocal:  map[ui.WindowID]int64{},
-		quit:     make(chan struct{}),
+	c := &Client{
+		conn:              conn,
+		display:           display,
+		verbose:           verbose,
+		username:          username,
+		password:          password,
+		windows:           map[int64]ui.Window{},
+		byLocal:           map[ui.WindowID]int64{},
+		clipboardRequests: map[int64]clipboardRequest{},
+		quit:              make(chan struct{}),
 	}
+	if provider, ok := display.(ui.ClipboardProvider); ok {
+		c.clipboard = provider.Clipboard()
+	}
+	return c
 }
 
 // SetPasswordPrompt installs the platform-specific interactive password
@@ -140,7 +155,7 @@ func (c *Client) debugf(format string, args ...any) {
 }
 
 func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
-	caps := buildHello(c.username)
+	caps := buildHello(c.username, c.clipboard != nil)
 	if challengeResponse != "" {
 		// The reply to a challenge is a second, complete hello carrying the
 		// response (xpra/client/base/client.py:359).
@@ -176,6 +191,29 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleCursorData(packet)
 	case "cursor-default":
 		c.handleCursorDefault()
+
+	case "clipboard-data":
+		c.handleClipboardData(packet)
+	case "clipboard-token":
+		if protocol.BackwardsCompatible {
+			c.handleClipboardToken(packet)
+		}
+	case "clipboard-request":
+		c.handleClipboardRequest(packet)
+	case "clipboard-contents":
+		c.handleClipboardContents(packet)
+	case "clipboard-contents-none":
+		c.handleClipboardContentsNone(packet)
+	case "clipboard-enable-selections":
+		c.handleClipboardEnableSelections(packet)
+	case "clipboard-status":
+		c.handleClipboardStatus(packet)
+	case "set-clipboard-enabled":
+		if protocol.BackwardsCompatible {
+			c.handleClipboardStatus(packet)
+		}
+	case "clipboard-pending-requests":
+		// Progress notification for richer clients with a tray indicator.
 
 	case "window-create":
 		c.handleNewWindow(packet, false)
@@ -350,6 +388,7 @@ func (c *Client) handleHello(packet protocol.Packet) {
 	caps := packet.Dict(1)
 	c.serverVersion = caps.Str("version")
 	log.Printf("connected to xpra server version %s", c.serverVersion)
+	c.configureClipboard(caps.Dict("clipboard"))
 }
 
 func (c *Client) handleChallenge(packet protocol.Packet) {
@@ -665,6 +704,8 @@ func (c *Client) handleUIEvent(event ui.Event) {
 		c.handleKey(e)
 	case ui.Focus:
 		c.handleFocus(e)
+	case ui.ClipboardChange:
+		c.handleClipboardChange(e)
 	}
 }
 

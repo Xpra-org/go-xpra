@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+* Features:
+  * add bidirectional UTF-8 text clipboard synchronization on X11, Wayland and Windows
 ## [0.2.3] 2026-08-01
 * TODO
 

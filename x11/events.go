@@ -4,6 +4,7 @@ package x11
 
 import (
 	"github.com/jezek/xgb"
+	"github.com/jezek/xgb/xfixes"
 	"github.com/jezek/xgb/xproto"
 
 	"github.com/Xpra-org/go-xpra/keysym"
@@ -18,6 +19,26 @@ import (
 // which keybind handles for us.
 func (d *Display) translate(event xgb.Event) (ui.Event, bool) {
 	switch e := event.(type) {
+	case xfixes.SelectionNotifyEvent:
+		if d.clipboard != nil {
+			return d.clipboard.ownerChanged(e)
+		}
+		return nil, false
+	case xproto.SelectionNotifyEvent:
+		if d.clipboard != nil {
+			return d.clipboard.selectionNotify(e)
+		}
+		return nil, false
+	case xproto.SelectionRequestEvent:
+		if d.clipboard != nil {
+			d.clipboard.selectionRequest(e)
+		}
+		return nil, false
+	case xproto.PropertyNotifyEvent:
+		if d.clipboard != nil {
+			return d.clipboard.propertyNotify(e)
+		}
+		return nil, false
 	case xproto.ConfigureNotifyEvent:
 		return ui.Configure{
 			Window: ui.WindowID(e.Window),

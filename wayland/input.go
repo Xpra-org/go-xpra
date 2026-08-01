@@ -53,6 +53,7 @@ func (d *Display) watchKeyboard(keyboard *client.Keyboard) {
 // places the pointer in its own screen space, so every position has to be read
 // together with the window it belongs to.
 func (d *Display) pointerEnter(e client.PointerEnterEvent) {
+	d.setInputSerial(e.Serial)
 	w := d.window(e.Surface)
 	if w == nil {
 		return
@@ -85,6 +86,7 @@ func (d *Display) pointerMotion(e client.PointerMotionEvent) {
 // one from the last motion is used — which is where the pointer is, motion
 // being reported before the button that follows it.
 func (d *Display) pointerButton(e client.PointerButtonEvent) {
+	d.setInputSerial(e.Serial)
 	w := d.pointerOver
 	if w == nil {
 		return
@@ -183,6 +185,7 @@ func (d *Display) keyboardKeymap(e client.KeyboardKeymapEvent) {
 }
 
 func (d *Display) keyboardEnter(e client.KeyboardEnterEvent) {
+	d.setInputSerial(e.Serial)
 	w := d.window(e.Surface)
 	if w == nil {
 		return
@@ -211,6 +214,7 @@ func (d *Display) keyboardModifiers(e client.KeyboardModifiersEvent) {
 // expects. A key the compositor's keymap does not describe gets no name, and
 // the client drops it rather than have the server guess from the keycode.
 func (d *Display) keyboardKey(e client.KeyboardKeyEvent) {
+	d.setInputSerial(e.Serial)
 	w := d.keyboardFocus
 	if w == nil {
 		return

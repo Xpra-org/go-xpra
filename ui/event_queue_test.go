@@ -63,6 +63,16 @@ func TestEventQueueCoalescesMotionAtCapacity(t *testing.T) {
 	}
 }
 
+func TestEventQueueCoalescesClipboardAtCapacity(t *testing.T) {
+	q := NewEventQueue(1)
+	q.Push(ClipboardChange{Text: "old"})
+	q.Push(ClipboardChange{Text: "new"})
+	event, ok := q.Pop()
+	if !ok || event != (ClipboardChange{Text: "new"}) {
+		t.Fatalf("clipboard event = %#v, %v", event, ok)
+	}
+}
+
 func drainEventQueue(q *EventQueue) []Event {
 	var events []Event
 	for {

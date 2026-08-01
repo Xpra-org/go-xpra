@@ -4,6 +4,7 @@ package x11
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jezek/xgb/render"
 	"github.com/jezek/xgb/xproto"
@@ -40,8 +41,9 @@ type Display struct {
 	cursor       xproto.Cursor
 	windows      map[xproto.Window]*Window
 
-	events chan ui.Event
-	done   chan struct{}
+	events    chan ui.Event
+	done      chan struct{}
+	clipboard *clipboard
 }
 
 var _ ui.Display = (*Display)(nil)
@@ -74,6 +76,11 @@ func Open() (*Display, error) {
 	if err := d.initCursorFormat(); err != nil {
 		return nil, err
 	}
+	if clipboard, err := newClipboard(d); err != nil {
+		log.Printf("x11: clipboard is unavailable: %v", err)
+	} else {
+		d.clipboard = clipboard
+	}
 
 	// The server states its request limit in 4-byte units. Everything but the
 	// pixel payload of a PutImage fits in 24 bytes; leaving a little more than
@@ -103,6 +110,10 @@ func (d *Display) createGC() error {
 // Events returns the channel of incoming events. It is closed when the
 // connection to the X server ends.
 func (d *Display) Events() <-chan ui.Event { return d.events }
+
+// Clipboard returns the X11 CLIPBOARD selection adapter, or nil when the
+// server does not provide the XFixes extension needed to watch ownership.
+func (d *Display) Clipboard() ui.Clipboard { return d.clipboard }
 
 // Bell rings the X server's keyboard bell. The core request can vary the
 // configured volume, but pitch and duration remain properties of the local X

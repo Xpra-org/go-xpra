@@ -63,9 +63,16 @@ type Focus struct {
 	Window WindowID
 }
 
-func (Configure) isEvent()    {}
-func (CloseRequest) isEvent() {}
-func (Motion) isEvent()       {}
-func (Button) isEvent()       {}
-func (Key) isEvent()          {}
-func (Focus) isEvent()        {}
+// ClipboardChange reports new UTF-8 text in the ordinary desktop clipboard.
+// Empty text is meaningful: it clears the remote clipboard too.
+type ClipboardChange struct {
+	Text string
+}
+
+func (Configure) isEvent()       {}
+func (CloseRequest) isEvent()    {}
+func (Motion) isEvent()          {}
+func (Button) isEvent()          {}
+func (Key) isEvent()             {}
+func (Focus) isEvent()           {}
+func (ClipboardChange) isEvent() {}
