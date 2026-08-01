@@ -122,6 +122,14 @@ type ClipboardProvider interface {
 	Clipboard() Clipboard
 }
 
+// SystemTrayProvider is implemented by displays which can expose a native
+// session control in the desktop's notification area. ShowTray is optional:
+// clients continue normally when a backend does not implement it or setup
+// fails.
+type SystemTrayProvider interface {
+	ShowTray(title string) error
+}
+
 // Window is one forwarded xpra window shown on the local desktop.
 //
 // Coordinates are always those of the content area, in screen space: that is

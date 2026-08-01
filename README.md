@@ -129,6 +129,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
 - server-provided PNG pointer cursors, including hotspot changes and default-cursor resets
 - server-provided per-window PNG icons on X11 and Windows, and on Wayland compositors supporting
   `xdg-toplevel-icon-v1`
+- a Windows notification-area session icon with a native Exit menu
 - native Wayland windows through `xdg-shell` and `wl_shm`, with menus as real `xdg_popup`s and
   window frames from `xdg-decoration`
 - forwarded application bells using the native X11 or Win32 sound
@@ -140,7 +141,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
 ## What it does not do
 
 Everything else: h264 and the other encodings, rich clipboard formats, audio, native notification
-popups, system tray, and keymap upload. Linux and Windows only — no macOS.
+popups, forwarded system tray icons, and keymap upload. Linux and Windows only — no macOS.
 
 Clipboard support deliberately covers only text in the ordinary `CLIPBOARD` selection. Images,
 HTML, file lists, and X11's `PRIMARY` and `SECONDARY` selections are not synchronized. Text is

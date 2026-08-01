@@ -382,6 +382,34 @@ func TestWebSocketURLDoesNotExposeCredentials(t *testing.T) {
 	}
 }
 
+func TestConnectionLabel(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"TCP default port", "tcp://example.com/", "xpra @ example.com:14500"},
+		{"WebSocket default port", "wss://example.com/", "xpra @ example.com:443"},
+		{"socket path", "socket:///run/user/1000/xpra/100", "xpra @ /run/user/1000/xpra/100"},
+		{"credentials omitted", "tcp://alice:top-secret@example.com:15000/", "xpra @ example.com:15000"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			target, err := parseConnectionURL(test.raw)
+			if err != nil {
+				t.Fatalf("parseConnectionURL: %v", err)
+			}
+			got := connectionLabel(target)
+			if got != test.want {
+				t.Errorf("connectionLabel = %q, want %q", got, test.want)
+			}
+			if strings.Contains(got, "top-secret") {
+				t.Errorf("connection label exposes password: %q", got)
+			}
+		})
+	}
+}
+
 func TestMakeTLSConfig(t *testing.T) {
 	target := connectionURL{
 		transport: transportSSL, address: "example.com:14500", serverName: "example.com",

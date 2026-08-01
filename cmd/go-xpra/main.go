@@ -290,6 +290,11 @@ func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.
 	defer conn.Close()
 
 	log.Printf("connected to %s", target.address)
+	if tray, ok := display.(ui.SystemTrayProvider); ok {
+		if err := tray.ShowTray(connectionLabel(target)); err != nil {
+			log.Printf("warning: system tray is unavailable: %v", err)
+		}
+	}
 	xpraClient := client.New(conn, display, verbose, target.username, clientPassword)
 	if target.transport == transportSocket {
 		if err := xpraClient.EnableMmap(); err != nil {
@@ -307,6 +312,10 @@ func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.
 		return promptPassword(promptUsername, target.address, description)
 	})
 	return xpraClient.Run()
+}
+
+func connectionLabel(target connectionURL) string {
+	return "xpra @ " + target.address
 }
 
 func (target connectionURL) webSocketURL() string {

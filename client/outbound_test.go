@@ -157,6 +157,36 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 	receiveOutbound(t, server, "ping_echo")
 }
 
+func TestExitRequestDisconnectsAndStopsCleanly(t *testing.T) {
+	client, server, _ := outboundHarness(t)
+	events := make(chan ui.Event, 1)
+	client.display = &exitRequestDisplay{events: events}
+	runResult := make(chan error, 1)
+	go func() { runResult <- client.Run() }()
+
+	receiveOutbound(t, server, "hello")
+	events <- ui.ExitRequest{}
+	packet := receiveOutbound(t, server, "disconnect")
+	if len(packet) != 2 || packet.Str(1) != "client exit" {
+		t.Errorf("disconnect packet = %v, want [disconnect client exit]", packet)
+	}
+	select {
+	case err := <-runResult:
+		if err != nil {
+			t.Errorf("Run returned %v, want a clean exit", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not stop after ExitRequest")
+	}
+}
+
+type exitRequestDisplay struct {
+	ui.Display
+	events <-chan ui.Event
+}
+
+func (d *exitRequestDisplay) Events() <-chan ui.Event { return d.events }
+
 func TestWindowDrawAckUsesTrunkShapeWithoutCompatibility(t *testing.T) {
 	setBackwardsCompatible(t, false)
 	client, server, window := outboundHarness(t)

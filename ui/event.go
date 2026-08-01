@@ -22,6 +22,10 @@ type CloseRequest struct {
 	Window WindowID
 }
 
+// ExitRequest is the user asking to end the whole Xpra session through a
+// desktop-level control such as a notification-area menu.
+type ExitRequest struct{}
+
 // Motion is pointer movement over a window. X and Y are absolute screen
 // coordinates, which is the space the server places the pointer in.
 type Motion struct {
@@ -71,6 +75,7 @@ type ClipboardChange struct {
 
 func (Configure) isEvent()       {}
 func (CloseRequest) isEvent()    {}
+func (ExitRequest) isEvent()     {}
 func (Motion) isEvent()          {}
 func (Button) isEvent()          {}
 func (Key) isEvent()             {}

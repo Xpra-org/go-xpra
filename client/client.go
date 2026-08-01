@@ -750,6 +750,10 @@ func (c *Client) handleUIEvent(event ui.Event) {
 		c.handleConfigure(e)
 	case ui.CloseRequest:
 		c.handleCloseRequest(e)
+	case ui.ExitRequest:
+		log.Printf("session exit requested")
+		c.send("disconnect", "client exit")
+		c.stop(nil)
 	case ui.Motion:
 		c.handleMotion(e)
 	case ui.Button:

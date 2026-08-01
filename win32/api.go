@@ -10,14 +10,15 @@ import (
 
 // The Win32 entry points this backend needs.
 //
-// user32, gdi32 and kernel32 are all on the loader's KnownDLLs list, which is
-// resolved from the system directory before any search path is consulted, so
-// the plain lazy load cannot be diverted by a DLL dropped next to the
-// executable.
+// user32, gdi32, kernel32 and shell32 are all on the loader's KnownDLLs list,
+// which is resolved from the system directory before any search path is
+// consulted, so the plain lazy load cannot be diverted by a DLL dropped next
+// to the executable.
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	user32   = syscall.NewLazyDLL("user32.dll")
 	gdi32    = syscall.NewLazyDLL("gdi32.dll")
+	shell32  = syscall.NewLazyDLL("shell32.dll")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 	procBeep            = kernel32.NewProc("Beep")
@@ -46,6 +47,8 @@ var (
 	procBeginPaint                    = user32.NewProc("BeginPaint")
 	procEndPaint                      = user32.NewProc("EndPaint")
 	procLoadCursor                    = user32.NewProc("LoadCursorW")
+	procLoadIcon                      = user32.NewProc("LoadIconW")
+	procLoadImage                     = user32.NewProc("LoadImageW")
 	procSetCursor                     = user32.NewProc("SetCursor")
 	procCreateIcon                    = user32.NewProc("CreateIconIndirect")
 	procDestroyIcon                   = user32.NewProc("DestroyIcon")
@@ -69,6 +72,14 @@ var (
 	procAddClipboardFormatListener    = user32.NewProc("AddClipboardFormatListener")
 	procRemoveClipboardFormatListener = user32.NewProc("RemoveClipboardFormatListener")
 	procGetClipboardSequenceNumber    = user32.NewProc("GetClipboardSequenceNumber")
+	procRegisterWindowMessage         = user32.NewProc("RegisterWindowMessageW")
+	procCreatePopupMenu               = user32.NewProc("CreatePopupMenu")
+	procAppendMenu                    = user32.NewProc("AppendMenuW")
+	procDestroyMenu                   = user32.NewProc("DestroyMenu")
+	procTrackPopupMenu                = user32.NewProc("TrackPopupMenu")
+	procSetForegroundWindow           = user32.NewProc("SetForegroundWindow")
+
+	procShellNotifyIcon = shell32.NewProc("Shell_NotifyIconW")
 
 	procSetDIBitsToDevice = gdi32.NewProc("SetDIBitsToDevice")
 	procCreateDIBSection  = gdi32.NewProc("CreateDIBSection")
@@ -99,17 +110,20 @@ const (
 	hwndTop            = 0           // HWND_TOP
 	hwndMessage        = ^uintptr(2) // (HWND)-3, the parent of message-only windows
 	idcArrow           = 32512
+	idiApplication     = 32512
 	dpiPerMonitorAware = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, (HANDLE)-4
 )
 
 // The messages the window procedure acts on.
 const (
 	wmDestroy          = 0x0002
+	wmNull             = 0x0000
 	wmSetFocus         = 0x0007
 	wmPaint            = 0x000F
 	wmClose            = 0x0010
 	wmEraseBkgnd       = 0x0014
 	wmSetCursor        = 0x0020
+	wmContextMenu      = 0x007B
 	wmWindowPosChanged = 0x0047
 	wmPrintClient      = 0x0318
 	wmSetIcon          = 0x0080
@@ -129,6 +143,7 @@ const (
 	wmXButtonUp        = 0x020C
 	wmMouseHWheel      = 0x020E
 	wmClipboardUpdate  = 0x031D
+	wmUser             = 0x0400
 	wmApp              = 0x8000
 
 	htClient = 1
@@ -238,6 +253,34 @@ type iconInfo struct {
 	Icon               int32
 	HotspotX, HotspotY uint32
 	Mask, Color        syscall.Handle
+}
+
+type guid struct {
+	Data1 uint32
+	Data2 uint16
+	Data3 uint16
+	Data4 [8]byte
+}
+
+// notifyIconData is NOTIFYICONDATAW. Keeping the full modern structure lets us
+// request version-4 callback semantics while remaining compatible with the
+// fixed-size tooltip field used by older shells.
+type notifyIconData struct {
+	Size        uint32
+	Hwnd        syscall.Handle
+	ID          uint32
+	Flags       uint32
+	Callback    uint32
+	Icon        syscall.Handle
+	Tip         [128]uint16
+	State       uint32
+	StateMask   uint32
+	Info        [256]uint16
+	Version     uint32
+	InfoTitle   [64]uint16
+	InfoFlags   uint32
+	GUID        guid
+	BalloonIcon syscall.Handle
 }
 
 // The wrappers below all follow the same shape: the Win32 call reports failure
@@ -443,6 +486,61 @@ func endPaint(hwnd syscall.Handle, ps *paintStruct) {
 func loadCursor(id uintptr) syscall.Handle {
 	r, _, _ := procLoadCursor.Call(0, id)
 	return syscall.Handle(r)
+}
+
+func loadIcon(instance syscall.Handle, id uintptr) syscall.Handle {
+	r, _, _ := procLoadIcon.Call(uintptr(instance), id)
+	return syscall.Handle(r)
+}
+
+func loadIconImage(instance syscall.Handle, id uintptr) (syscall.Handle, error) {
+	r, _, err := procLoadImage.Call(uintptr(instance), id, imageIcon, 0, 0, lrDefaultSize)
+	if r == 0 {
+		return 0, fmt.Errorf("LoadImageW: %w", err)
+	}
+	return syscall.Handle(r), nil
+}
+
+func registerWindowMessage(name *uint16) (uint32, error) {
+	r, _, err := procRegisterWindowMessage.Call(uintptr(unsafe.Pointer(name)))
+	if r == 0 {
+		return 0, fmt.Errorf("RegisterWindowMessageW: %w", err)
+	}
+	return uint32(r), nil
+}
+
+func createPopupMenu() (syscall.Handle, error) {
+	r, _, err := procCreatePopupMenu.Call()
+	if r == 0 {
+		return 0, fmt.Errorf("CreatePopupMenu: %w", err)
+	}
+	return syscall.Handle(r), nil
+}
+
+func appendMenu(menu syscall.Handle, flags uint32, id uintptr, text *uint16) error {
+	r, _, err := procAppendMenu.Call(uintptr(menu), uintptr(flags), id,
+		uintptr(unsafe.Pointer(text)))
+	if r == 0 {
+		return fmt.Errorf("AppendMenuW: %w", err)
+	}
+	return nil
+}
+
+func destroyMenu(menu syscall.Handle) { procDestroyMenu.Call(uintptr(menu)) }
+
+func trackPopupMenu(menu syscall.Handle, flags uint32, x, y int32, owner syscall.Handle) uint32 {
+	r, _, _ := procTrackPopupMenu.Call(uintptr(menu), uintptr(flags), uintptr(x), uintptr(y),
+		0, uintptr(owner), 0)
+	return uint32(r)
+}
+
+func setForegroundWindow(hwnd syscall.Handle) {
+	procSetForegroundWindow.Call(uintptr(hwnd))
+}
+
+func shellNotifyIcon(message uint32, data *notifyIconData) bool {
+	r, _, _ := procShellNotifyIcon.Call(uintptr(message), uintptr(unsafe.Pointer(data)))
+	return r != 0
 }
 
 func setCursor(cursor syscall.Handle) {

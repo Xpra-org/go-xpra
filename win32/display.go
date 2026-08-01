@@ -14,7 +14,8 @@ import (
 )
 
 // className is the window class everything here is created from: the forwarded
-// windows and the invisible helper that wakes the message loop.
+// windows, the notification-area owner, and the invisible helper that wakes
+// the message loop.
 const className = "go-xpra-window"
 
 // The messages this backend posts to itself. WM_APP and above are reserved for
@@ -24,6 +25,8 @@ const (
 	wmRunCalls = wmApp + iota
 	// wmStop ends the message loop.
 	wmStop
+	// wmTrayCallback carries notification-area activation messages.
+	wmTrayCallback
 )
 
 // wheelDelta is one notch of a mouse wheel.
@@ -54,6 +57,12 @@ type Display struct {
 	cursorOwned        bool
 	clipboardSequence  uint32
 	clipboardAvailable bool
+	tray               syscall.Handle
+	trayIcon           syscall.Handle
+	trayIconOwned      bool
+	trayAdded          bool
+	trayTitle          string
+	taskbarCreated     uint32
 
 	calls      chan func()
 	events     chan ui.Event
@@ -64,6 +73,7 @@ type Display struct {
 }
 
 var _ ui.Display = (*Display)(nil)
+var _ ui.SystemTrayProvider = (*Display)(nil)
 
 // Open starts the window thread.
 //
@@ -179,6 +189,7 @@ func (d *Display) windowThread(started chan<- error) {
 		return
 	}
 	defer func() {
+		d.destroyTray()
 		if d.clipboardAvailable {
 			removeClipboardFormatListener(d.helper)
 		}
@@ -316,16 +327,33 @@ func (d *Display) dispatchEvents() {
 // It runs on the window thread, so it may touch the thread-owned fields of
 // Display freely, but nothing it does may block: the desktop is waiting for it.
 func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
-	switch uint32(message) {
+	messageID := uint32(message)
+	switch messageID {
 	case wmRunCalls:
 		d.runCalls()
 		return 0
 	case wmStop:
+		d.destroyTray()
 		postQuitMessage()
 		return 0
 	case wmClipboardUpdate:
 		d.clipboardChanged()
 		return 0
+	case wmTrayCallback:
+		if syscall.Handle(hwnd) == d.tray {
+			d.handleTrayCallback(uint32(lparam))
+			return 0
+		}
+	}
+	if syscall.Handle(hwnd) == d.tray {
+		if d.taskbarCreated != 0 && messageID == d.taskbarCreated {
+			d.restoreTray()
+			return 0
+		}
+		if messageID == wmDestroy {
+			d.tray = 0
+		}
+		return defWindowProc(syscall.Handle(hwnd), messageID, wparam, lparam)
 	}
 
 	w := d.windows[syscall.Handle(hwnd)]
@@ -335,7 +363,7 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 		return defWindowProc(syscall.Handle(hwnd), uint32(message), wparam, lparam)
 	}
 
-	switch uint32(message) {
+	switch messageID {
 	case wmPaint:
 		var ps paintStruct
 		hdc := beginPaint(w.hwnd, &ps)
