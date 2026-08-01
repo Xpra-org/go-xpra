@@ -18,6 +18,10 @@ Prebuilt binaries are available directly from GitHub on each
 from the Xpra repositories under the package name `go-xpra`; see the
 [Xpra download setup instructions](https://github.com/Xpra-org/xpra/wiki/Download).
 
+Building from source needs Go 1.25.0 or newer, the version the `go` directive in `go.mod` states.
+The floor comes from `golang.org/x/image` rather than from this code, which still compiles under
+1.24.
+
 ```shell
 go build ./cmd/go-xpra
 

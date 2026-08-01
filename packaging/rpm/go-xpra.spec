@@ -12,7 +12,7 @@ License:        GPL-3.0-only
 URL:            https://github.com/Xpra-org/go-xpra
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 
-BuildRequires:  golang >= 1.26
+BuildRequires:  golang >= 1.25
 BuildRequires:  desktop-file-utils
 Recommends:     openssh-clients
 Recommends:     pinentry
