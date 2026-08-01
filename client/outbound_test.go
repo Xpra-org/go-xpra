@@ -23,6 +23,9 @@ type outboundWindow struct {
 	ui.Window
 	id                  ui.WindowID
 	x, y, width, height int
+	painted             []byte
+	paintStride         int
+	paintFormat         string
 }
 
 func (w *outboundWindow) ID() ui.WindowID {
@@ -42,7 +45,10 @@ func (w *outboundWindow) Resized(x, y, width, height int) error {
 	return nil
 }
 
-func (w *outboundWindow) Paint(_, _, _, _ int, _ []byte, _ int, _ string) error {
+func (w *outboundWindow) Paint(_, _, _, _ int, pixels []byte, rowstride int, format string) error {
+	w.painted = append(w.painted[:0], pixels...)
+	w.paintStride = rowstride
+	w.paintFormat = format
 	return nil
 }
 

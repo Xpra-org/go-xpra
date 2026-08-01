@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 )
 
@@ -16,8 +17,9 @@ const maxDepth = 64
 // Decode deserializes a complete rencodeplus value. It is an error for the
 // input to hold trailing bytes beyond the first value.
 //
-// Wire types map to Go as: text to string, binary to []byte, integers to int64,
-// floats to float64, lists to []any, dicts to map[string]any, none to nil.
+// Wire types map to Go as: text to string, binary to []byte, integers to int64
+// when possible and *big.Int otherwise, floats to float64, lists to []any,
+// dicts to map[string]any, none to nil.
 func Decode(data []byte) (any, error) {
 	d := &decoder{data: data}
 	v, err := d.value(0)
@@ -171,9 +173,9 @@ func (d *decoder) sized() (any, error) {
 	return string(b), nil
 }
 
-// bigInt reads the ASCII-decimal bignum form. xpra never emits one for a value
-// that fits in an int64, so anything that does not fit is a protocol error
-// rather than something to represent.
+// bigInt reads the ASCII-decimal bignum form. Values that fit in int64 retain
+// the ordinary decoder representation; larger values are needed by mmap UUID
+// tokens and remain arbitrary precision.
 func (d *decoder) bigInt() (any, error) {
 	start := d.pos
 	for d.pos < len(d.data) && d.data[d.pos] != chrTerm {
@@ -184,9 +186,12 @@ func (d *decoder) bigInt() (any, error) {
 	}
 	s := string(d.data[start:d.pos])
 	d.pos++ // chrTerm
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("rencodeplus: bignum %q does not fit in int64: %w", s, err)
+	n, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return nil, fmt.Errorf("rencodeplus: invalid bignum %q", s)
+	}
+	if n.IsInt64() {
+		return n.Int64(), nil
 	}
 	return n, nil
 }

@@ -56,6 +56,7 @@ type Client struct {
 	username       string
 	password       string
 	passwordPrompt PasswordPrompt
+	mmap           *mmapArea
 	exitErr        error
 	quit           chan struct{}
 }
@@ -94,6 +95,7 @@ func (c *Client) SetPasswordPrompt(prompt PasswordPrompt) {
 // Run performs the handshake and then services packets and local events until
 // the connection ends. It returns nil for a clean server-initiated disconnect.
 func (c *Client) Run() error {
+	defer c.closeMmap()
 	if err := c.sendHello("", nil); err != nil {
 		return fmt.Errorf("sending hello: %w", err)
 	}
@@ -156,6 +158,9 @@ func (c *Client) debugf(format string, args ...any) {
 
 func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
 	caps := buildHello(c.username, c.clipboard != nil)
+	if c.mmap != nil {
+		caps.Set("mmap", c.mmap.helloCaps())
+	}
 	if challengeResponse != "" {
 		// The reply to a challenge is a second, complete hello carrying the
 		// response (xpra/client/base/client.py:359).
@@ -386,6 +391,10 @@ func (c *Client) handleCursorDefault() {
 
 func (c *Client) handleHello(packet protocol.Packet) {
 	caps := packet.Dict(1)
+	if err := c.negotiateMmap(caps); err != nil {
+		c.stop(fmt.Errorf("mmap negotiation: %w", err))
+		return
+	}
 	c.serverVersion = caps.Str("version")
 	log.Printf("connected to xpra server version %s", c.serverVersion)
 	c.configureClipboard(caps.Dict("clipboard"))
@@ -614,7 +623,11 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 	rowstride := int(packet.Int(9))
 	options := packet.Dict(10)
 
+	releasePixels := func() {}
 	ack := func(decodeTime int64, message string) {
+		// The mmap writer may reuse this region as soon as it observes the
+		// acknowledgement, so publish the read cursor before queuing the ack.
+		releasePixels()
 		if protocol.BackwardsCompatible {
 			// Xpra 6.5.x puts the packet sequence before the window id.
 			c.send("window-draw-ack", sequence, wid, width, height, decodeTime, message)
@@ -625,20 +638,60 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 		}
 	}
 
+	var pixels []byte
+	if coding == "mmap" {
+		if c.mmap == nil {
+			ack(decodeError, "mmap screen updates were not negotiated")
+			return
+		}
+		var chunks any
+		if options != nil {
+			chunks = options["chunks"]
+		}
+		if chunks == nil && len(packet) > 7 {
+			chunks = packet[7]
+		}
+		var release func()
+		var err error
+		pixels, release, err = c.mmap.readChunks(chunks)
+		if err != nil {
+			log.Printf("window %d: %v", wid, err)
+			ack(decodeError, err.Error())
+			return
+		}
+		releasePixels = release
+		defer releasePixels()
+	}
+
 	window, ok := c.windows[wid]
 	if !ok {
 		ack(decodeNotFound, "window not found")
 		return
 	}
-	pixels, ok := packet.Bytes(7)
-	if !ok {
-		ack(decodeError, "no pixel data")
-		return
+	if coding != "mmap" {
+		var pixelsOK bool
+		pixels, pixelsOK = packet.Bytes(7)
+		if !pixelsOK {
+			ack(decodeError, "no pixel data")
+			return
+		}
 	}
 
 	start := time.Now()
 	format := ""
 	switch coding {
+	case "mmap":
+		format = options.Str("rgb_format")
+		if format == "" {
+			format = "RGB"
+		}
+		if rowstride <= 0 || height <= 0 || rowstride > len(pixels)/height {
+			err := errors.New("mmap pixel data is smaller than its rowstride and height")
+			log.Printf("window %d: %v", wid, err)
+			ack(decodeError, err.Error())
+			return
+		}
+
 	case "rgb", "rgb24", "rgb32":
 		// Pixel-level compression is opt-in and we never advertise the "lz4"
 		// or "zstd" capability that enables it
@@ -674,6 +727,7 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 		return
 	}
 
+	c.debugf("window %d: drawing %dx%d at %d,%d using %s", wid, width, height, x, y, coding)
 	if err := window.Paint(x, y, width, height, pixels, rowstride, format); err != nil {
 		log.Printf("window %d: %v", wid, err)
 		ack(decodeError, err.Error())

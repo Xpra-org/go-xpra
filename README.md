@@ -81,7 +81,10 @@ On Unix-like systems, local connections use Xpra's standard
 ```
 
 The socket path must be absolute. Linux abstract-namespace sockets and automatic display-name
-lookup are not currently supported.
+lookup are not currently supported. On Linux, socket connections also negotiate a receive-only
+128 MiB shared-memory area for screen updates. The temporary file is private to the current user,
+is removed once the server has mapped it, and falls back to ordinary encoded updates when the
+server declines mmap.
 
 Running `./go-xpra` without any arguments opens a connection dialog instead. It offers the
 supported `tcp`, `ssl`, `ws`, `wss` and `ssh` protocols, plus `socket` on Unix-like systems, and
@@ -116,6 +119,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
 - plain TCP, TLS, WebSocket, secure WebSocket, SSH-subprocess and Unix-domain socket transports,
   `rencodeplus` packet encoding, inbound `lz4` decompression, and out-of-band binary chunk
   reassembly
+- receive-side mmap screen updates for local Linux socket connections
 - password authentication (the `hmac+sha256` challenge)
 - window create, destroy, move/resize, raise, minimize/restore, title changes, and
   override-redirect popups
@@ -135,7 +139,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
 
 ## What it does not do
 
-Everything else: h264 and the other encodings, mmap, rich clipboard formats, audio, native notification
+Everything else: h264 and the other encodings, rich clipboard formats, audio, native notification
 popups, system tray, and keymap upload. Linux and Windows only — no macOS.
 
 Clipboard support deliberately covers only text in the ordinary `CLIPBOARD` selection. Images,

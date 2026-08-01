@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"math"
+	"math/big"
 	"reflect"
 	"strings"
 	"testing"
@@ -237,10 +238,12 @@ func TestDecodedBytesAreCopied(t *testing.T) {
 }
 
 func TestRoundTrip(t *testing.T) {
+	large := new(big.Int).Lsh(big.NewInt(1), 127)
 	values := []any{
 		"hello", []byte{0, 1, 2}, true, false, nil,
 		int64(0), int64(43), int64(44), int64(-1), int64(-32), int64(-33),
 		int64(math.MaxInt64), int64(math.MinInt64), 3.5,
+		large,
 		[]any{int64(1), "two", []any{int64(3)}},
 	}
 	for _, v := range values {
@@ -255,6 +258,30 @@ func TestRoundTrip(t *testing.T) {
 		if !reflect.DeepEqual(got, v) {
 			t.Errorf("round trip of %#v gave %#v", v, got)
 		}
+	}
+}
+
+func TestBigIntWireFormat(t *testing.T) {
+	value, ok := new(big.Int).SetString("340282366920938463463374607431768211455", 10)
+	if !ok {
+		t.Fatal("invalid bigint fixture")
+	}
+	encoded, err := Encode(value)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	want := append([]byte{chrInt}, value.String()...)
+	want = append(want, chrTerm)
+	if !bytes.Equal(encoded, want) {
+		t.Errorf("encoded bigint = %q, want %q", encoded, want)
+	}
+	decoded, err := Decode(encoded)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	got, ok := decoded.(*big.Int)
+	if !ok || got.Cmp(value) != 0 {
+		t.Errorf("decoded bigint = %#v, want %v", decoded, value)
 	}
 }
 

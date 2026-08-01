@@ -291,6 +291,11 @@ func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.
 
 	log.Printf("connected to %s", target.address)
 	xpraClient := client.New(conn, display, verbose, target.username, clientPassword)
+	if target.transport == transportSocket {
+		if err := xpraClient.EnableMmap(); err != nil {
+			log.Printf("warning: mmap screen updates are unavailable: %v", err)
+		}
+	}
 	promptUsername := target.username
 	if promptUsername == "" {
 		promptUsername = os.Getenv("USER")

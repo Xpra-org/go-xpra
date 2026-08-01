@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strconv"
 )
@@ -17,6 +18,7 @@ import (
 //	bool             true/false
 //	int, int8..int64 integer
 //	uint, uint8..uint64 integer (must fit in an int64)
+//	big.Int, *big.Int arbitrary precision integer
 //	float32, float64 64-bit float
 //	nil              none
 //	[]any, []string  list
@@ -75,6 +77,13 @@ func encode(buf []byte, v any) ([]byte, error) {
 			return nil, fmt.Errorf("rencodeplus: uint64 %d overflows int64", x)
 		}
 		return encodeInt(buf, int64(x))
+	case big.Int:
+		return encodeBigInt(buf, &x)
+	case *big.Int:
+		if x == nil {
+			return nil, fmt.Errorf("rencodeplus: cannot encode a nil *big.Int")
+		}
+		return encodeBigInt(buf, x)
 
 	case float32:
 		return encodeFloat(buf, float64(x)), nil
@@ -113,6 +122,15 @@ func encode(buf []byte, v any) ([]byte, error) {
 	return nil, fmt.Errorf("rencodeplus: cannot encode %T", v)
 }
 
+func encodeBigInt(buf []byte, n *big.Int) ([]byte, error) {
+	if n.IsInt64() {
+		return encodeInt(buf, n.Int64())
+	}
+	buf = append(buf, chrInt)
+	buf = n.Append(buf, 10)
+	return append(buf, chrTerm), nil
+}
+
 func encodeString(buf []byte, s string) []byte {
 	if len(s) < strFixedCount {
 		return append(append(buf, byte(strFixedStart+len(s))), s...)
@@ -143,8 +161,6 @@ func encodeInt(buf []byte, n int64) ([]byte, error) {
 	default:
 		return binary.BigEndian.AppendUint64(append(buf, chrInt8), uint64(n)), nil
 	}
-	// The bignum form (chrInt) is unreachable: every int64 is covered above,
-	// and xpra's own decoder cannot read bignums shorter than 19 digits anyway.
 }
 
 func encodeFloat(buf []byte, f float64) []byte {
