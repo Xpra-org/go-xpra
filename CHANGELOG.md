@@ -1,10 +1,11 @@
 # Changelog
-## [Unreleased]
+## [0.2.3] 2026-08-01
 * Features:
+  * [add mmap screen update support](https://github.com/Xpra-org/go-xpra/commit/38459b387046128fe922395f79aa1e71201ba3cf)
   * add bidirectional UTF-8 text clipboard synchronization on X11, Wayland and Windows
   * [avoid crashes when optional clipboard initialization fails](https://github.com/Xpra-org/go-xpra/commit/dcea4a827cc921a46e18e7012703faecb00f61d7)
-## [0.2.3] 2026-08-01
-* TODO
+* Network:
+  * [add Unix-domain socket support](https://github.com/Xpra-org/go-xpra/commit/7b6bef521f806360a59955f519831d160d96a6f3)
 
 ## [0.2.2] 2026-08-01
 * Platforms, build and packaging:
