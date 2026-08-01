@@ -1,3 +1,7 @@
+go-xpra (0.2.3-1) UNRELEASED; urgency=medium
+
+ -- Antoine Martin <antoine@xpra.org>  Sat, 01 Aug 2026 21:27:06 +0700
+
 go-xpra (0.2.2-1) UNRELEASED; urgency=medium
 
   * Platforms, build and packaging:

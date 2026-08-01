@@ -4,7 +4,7 @@
 %{!?run_tests:%global run_tests 1}
 
 Name:           go-xpra
-Version:        0.2.2
+Version:        0.2.3
 Release:        1%{?dist}
 Summary:        Minimal Xpra client written in Go
 
@@ -60,6 +60,9 @@ go test ./...
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Sat Aug 01 2026 Antoine Martin <antoine@xpra.org> 0.2.3-1
+- TODO
+
 * Sat Aug 01 2026 Antoine Martin <antoine@xpra.org> 0.2.2-1
 - Platforms, build and packaging:
    download source and verify its checksum

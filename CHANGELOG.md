@@ -1,5 +1,8 @@
 # Changelog
 ## [Unreleased]
+## [0.2.3] 2026-08-01
+* TODO
+
 ## [0.2.2] 2026-08-01
 * Platforms, build and packaging:
   * [download source and verify its checksum](https://github.com/Xpra-org/go-xpra/commit/427a87a310e0f3fd80facb9d65f66014b2ecc6b0)
