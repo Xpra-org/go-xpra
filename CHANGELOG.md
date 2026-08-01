@@ -1,7 +1,22 @@
 # Changelog
 ## [Unreleased]
+## [0.2.2] 2026-08-01
 * Platforms, build and packaging:
   * [download source and verify its checksum](https://github.com/Xpra-org/go-xpra/commit/427a87a310e0f3fd80facb9d65f66014b2ecc6b0)
+  * [our build scripts already use symlinks](https://github.com/Xpra-org/go-xpra/commit/519a0e78e30f90adba4ed2ad9cec6e141e8b660f)
+  * [add the go-xpra manual page](https://github.com/Xpra-org/go-xpra/commit/2e8ef31bc76fcf691c2a0872ef70b2400b845944)
+  * [make it easier to diagnose dependency issues](https://github.com/Xpra-org/go-xpra/commit/e4e38f598ae5da0a76e4213c8cbff8cc250cbbbb)
+  * [lower the Go requirement to the real floor](https://github.com/Xpra-org/go-xpra/commit/cde34a6f367409f0f1a48ba67c7368d909ee466c)
+  * [ask apt to install golang, but use a newer one if too old](https://github.com/Xpra-org/go-xpra/commit/4dcb8d42d2498f66adba8cdcc6238b28af27157e)
+* Network:
+  * [avoid killing a reaped SSH process](https://github.com/Xpra-org/go-xpra/commit/ebc5eeadcc4746175900b5a0adc2533238bc35f6)
+  * [use wheel packets for scroll events](https://github.com/Xpra-org/go-xpra/commit/de82392e30634dbc3bdcde206305036fbe6f5ed7)
+* Documentation and testing:
+  * [add the project changelog](https://github.com/Xpra-org/go-xpra/commit/5bfb828f3f9617c20c9b1f0fb3e2833d31d91a81)
+  * [add changelog entries](https://github.com/Xpra-org/go-xpra/commit/3ce49bb5d3ada18945948b8d6f731e14e21590f5)
+  * [link to package downloads](https://github.com/Xpra-org/go-xpra/commit/a5d060cfaf51320e47079ce10c4f9f93e2681373)
+  * [add the docs folder with the dependency graph](https://github.com/Xpra-org/go-xpra/commit/00291ce89cdc28522a4e63dbb9ee51dcefb225f4)
+  * [publish the dependency graph on github pages](https://github.com/Xpra-org/go-xpra/commit/26ba25a54934bbbd7b90de17081365ec1ff74225)
 ## [0.2.1] 2026-07-30
 * Platforms, build and packaging:
   * [bump the version](https://github.com/Xpra-org/go-xpra/commit/e7267422ee511408f3a57afabf2ec45e0645264f)

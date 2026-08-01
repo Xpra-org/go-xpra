@@ -1,3 +1,23 @@
+go-xpra (0.2.2-1) UNRELEASED; urgency=medium
+
+  * Platforms, build and packaging:
+    download source and verify its checksum
+    our build scripts already use symlinks
+    make it easier to diagnose dependency issues
+    lower the Go requirement to the real floor
+    ask apt to install golang, but use a newer one if too old
+  * Network:
+    avoid killing a reaped SSH process
+    use wheel packets for scroll events
+  * Documentation and testing:
+    add the project changelog
+    add changelog entries
+    link to package downloads
+    add the docs folder with the dependency graph
+    publish the dependency graph on github pages
+
+ -- Antoine Martin <antoine@xpra.org>  Sat, 01 Aug 2026 21:27:06 +0700
+
 go-xpra (0.2.1-1) UNRELEASED; urgency=medium
 
   * Platforms, build and packaging:

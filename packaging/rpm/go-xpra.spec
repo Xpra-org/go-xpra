@@ -4,7 +4,7 @@
 %{!?run_tests:%global run_tests 1}
 
 Name:           go-xpra
-Version:        0.2.1
+Version:        0.2.2
 Release:        1%{?dist}
 Summary:        Minimal Xpra client written in Go
 
@@ -60,6 +60,22 @@ go test ./...
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Sat Aug 01 2026 Antoine Martin <antoine@xpra.org> 0.2.2-1
+- Platforms, build and packaging:
+   download source and verify its checksum
+   our build scripts already use symlinks
+   make it easier to diagnose dependency issues
+   lower the Go requirement to the real floor
+   ask apt to install golang, but use a newer one if too old
+- Network:
+   avoid killing a reaped SSH process
+   use wheel packets for scroll events
+- Documentation and testing:
+   add the project changelog
+   add changelog entries
+   link to package downloads
+   add the docs folder with the dependency graph
+   publish the dependency graph on github pages
 * Thu Jul 30 2026 Antoine Martin <antoine@xpra.org> 0.2.1-1
 - Platforms, build and packaging:
    bump the version
