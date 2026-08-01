@@ -25,7 +25,7 @@ cp -a ../go-xpra debian
 mk-build-deps \
 	--install \
 	--remove \
-	--tool='apt-get --no-install-recommends --yes' \
+	--tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' \
 	debian/control
 
 deb_filename="go-xpra_${changelog_version}_${DEB_BUILD_ARCH}.deb"
