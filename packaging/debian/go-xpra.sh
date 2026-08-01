@@ -46,21 +46,58 @@ installed_go_version() {
 	echo "${version%%[!0-9.]*}"
 }
 
+# the Go apt would install, found out without installing it:
+# golang-1.18 and friends are hundreds of megabytes
+candidate_go_version() {
+	local version
+	version="$(apt-cache policy golang-go 2>/dev/null | awk '/Candidate:/ { print $2 }')"
+	[ -n "${version}" ] && [ "${version}" != "(none)" ] || return 0
+	# "2:1.18~0ubuntu2" is an epoch, an upstream version and a distribution suffix
+	version="${version#*:}"
+	echo "${version%%[!0-9.]*}"
+}
+
+# stop apt from installing a Go the build is not going to use
+drop_golang_build_dep() {
+	if ! grep -Eq '^[[:space:]]*golang-go,?$' debian/control; then
+		echo "no golang-go build dependency found in debian/control"
+		exit 1
+	fi
+	sed -Ei '/^[[:space:]]*golang-go,?$/d' debian/control
+}
+
 # put a Go at least as new as go.mod asks for first on the PATH,
-# unpacking the upstream release when the distribution's is too old
+# unpacking the upstream release when the distribution's is too old.
+# This runs before the build dependencies are installed so that apt is
+# never asked for a Go the build would then ignore.
 setup_go() {
 	local minimum version tarball_info arch sha256 tarball go_root
 	minimum="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+
 	version="$(installed_go_version)"
 	if [ -n "${version}" ] && dpkg --compare-versions "${version}" ge "${minimum}"; then
-		echo "building with the distribution's Go ${version}, go.mod asks for ${minimum}"
+		echo "building with the installed Go ${version}, go.mod asks for ${minimum}"
+		# debuild replaces the PATH with a sanitised one of its own
+		DEBUILD_ARGS=("--prepend-path=$(dirname "$(command -v go)")")
+		drop_golang_build_dep
 		return
 	fi
+
+	# apt does not upgrade an installed golang-go to satisfy an unversioned
+	# build dependency, so what apt offers only matters when no Go is installed
 	if [ -z "${version}" ]; then
-		echo "no Go found, go.mod asks for ${minimum}: unpacking ${GO_VERSION}"
+		version="$(candidate_go_version)"
+		if [ -n "${version}" ] && dpkg --compare-versions "${version}" ge "${minimum}"; then
+			echo "building with the distribution's Go ${version}, go.mod asks for ${minimum}"
+			return
+		fi
+	fi
+	if [ -z "${version}" ]; then
+		echo "no Go is available, go.mod asks for ${minimum}: unpacking ${GO_VERSION}"
 	else
 		echo "Go ${version} is older than the ${minimum} go.mod asks for: unpacking ${GO_VERSION}"
 	fi
+	drop_golang_build_dep
 
 	tarball_info="$(go_tarball_for "${DEB_BUILD_ARCH}")"
 	if [ -z "${tarball_info}" ]; then
@@ -71,7 +108,12 @@ setup_go() {
 
 	tarball="${GO_TOOLCHAIN_PATH}/go${GO_VERSION}.linux-${arch}.tar.gz"
 	if [ ! -f "${tarball}" ]; then
-		fetch "https://go.dev/dl/$(basename "${tarball}")" "${tarball}.part"
+		if ! fetch "https://go.dev/dl/$(basename "${tarball}")" "${tarball}.part"; then
+			rm -f -- "${tarball}.part"
+			df -h "${GO_TOOLCHAIN_PATH}"
+			echo "failed to download go${GO_VERSION} to ${GO_TOOLCHAIN_PATH}"
+			exit 1
+		fi
 		mv "${tarball}.part" "${tarball}"
 	fi
 	echo "${sha256}  ${tarball}" | sha256sum --check --strict -
@@ -105,12 +147,6 @@ tar -xzf "${GO_XPRA_TAR_GZ}"
 pushd "./${source_dir}"
 cp -a ../go-xpra debian
 
-mk-build-deps \
-	--install \
-	--remove \
-	--tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' \
-	debian/control
-
 deb_filename="go-xpra_${changelog_version}_${DEB_BUILD_ARCH}.deb"
 mkdir -p "${REPO_ARCH_PATH}"
 if find "${REPO_ARCH_PATH}" -name "${deb_filename}" -print -quit | grep -q .; then
@@ -118,6 +154,11 @@ if find "${REPO_ARCH_PATH}" -name "${deb_filename}" -print -quit | grep -q .; th
 else
 	DEBUILD_ARGS=()
 	setup_go
+	mk-build-deps \
+		--install \
+		--remove \
+		--tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' \
+		debian/control
 	debuild "${DEBUILD_ARGS[@]}" --no-lintian -us -uc -b
 	find .. -maxdepth 1 -type f \
 		\( -name 'go-xpra_*.deb' -o -name 'go-xpra_*.changes' -o -name 'go-xpra_*.buildinfo' \) \
