@@ -25,7 +25,7 @@ local X11 or Wayland desktop.
 
 %prep
 sha256=`sha256sum %{SOURCE0} | awk '{print $1}'`
-if [ "${sha256}" != "5beed38336dc1614b71f2613b7772d123bd6fd81ca5217fb8305433cffd3eab2" ]; then
+if [ "${sha256}" != "d7e89255edaeb9c8e2af08d7b3a54e00ba71412d6bfe03a0d7c9b9d42340495b" ]; then
 	echo "invalid checksum for %{SOURCE0}"
 	exit 1
 fi
