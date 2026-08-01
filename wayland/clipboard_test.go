@@ -4,6 +4,13 @@ package wayland
 
 import "testing"
 
+func TestUnavailableClipboardIsNil(t *testing.T) {
+	d := &Display{}
+	if clipboard := d.Clipboard(); clipboard != nil {
+		t.Fatalf("Clipboard() = %#v, want nil", clipboard)
+	}
+}
+
 func TestPreferredWaylandMIME(t *testing.T) {
 	if got := preferredWaylandMIME([]string{"application/json", "text/plain", "text/plain;charset=utf-8"}); got != "text/plain;charset=utf-8" {
 		t.Fatalf("preferred MIME = %q", got)

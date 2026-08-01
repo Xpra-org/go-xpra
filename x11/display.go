@@ -113,7 +113,12 @@ func (d *Display) Events() <-chan ui.Event { return d.events }
 
 // Clipboard returns the X11 CLIPBOARD selection adapter, or nil when the
 // server does not provide the XFixes extension needed to watch ownership.
-func (d *Display) Clipboard() ui.Clipboard { return d.clipboard }
+func (d *Display) Clipboard() ui.Clipboard {
+	if d.clipboard == nil {
+		return nil
+	}
+	return d.clipboard
+}
 
 // Bell rings the X server's keyboard bell. The core request can vary the
 // configured volume, but pitch and duration remain properties of the local X

@@ -187,7 +187,12 @@ func (d *Display) Events() <-chan ui.Event { return d.events }
 
 // Clipboard returns the wl_data_device clipboard, or nil when the compositor
 // does not advertise that optional global.
-func (d *Display) Clipboard() ui.Clipboard { return d.clipboard }
+func (d *Display) Clipboard() ui.Clipboard {
+	if d.clipboard == nil {
+		return nil
+	}
+	return d.clipboard
+}
 
 // Bell does nothing. Wayland has no bell protocol and no way to reach the
 // desktop's sound theme that does not go through C libraries, so a remote

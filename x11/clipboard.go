@@ -17,6 +17,11 @@ import (
 
 const maxClipboardBytes = 16 * 1024 * 1024
 
+const (
+	xfixesMajorVersion = 6
+	xfixesMinorVersion = 0
+)
+
 type clipboard struct {
 	d                                                                 *Display
 	window                                                            xproto.Window
@@ -47,6 +52,17 @@ var _ ui.Clipboard = (*clipboard)(nil)
 func newClipboard(d *Display) (*clipboard, error) {
 	if err := xfixes.Init(d.X.Conn()); err != nil {
 		return nil, fmt.Errorf("initializing XFixes: %w", err)
+	}
+	version, err := xfixes.QueryVersion(d.X.Conn(), xfixesMajorVersion, xfixesMinorVersion).Reply()
+	if err != nil {
+		return nil, fmt.Errorf("negotiating XFixes version: %w", err)
+	}
+	if version == nil {
+		return nil, fmt.Errorf("negotiating XFixes version: empty reply")
+	}
+	if version.MajorVersion < 1 {
+		return nil, fmt.Errorf("XFixes %d.%d does not support selection notifications",
+			version.MajorVersion, version.MinorVersion)
 	}
 	window, err := xproto.NewWindowId(d.X.Conn())
 	if err != nil {
