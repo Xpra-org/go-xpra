@@ -136,6 +136,68 @@ func TestConnectionFormWebSocketTarget(t *testing.T) {
 	}
 }
 
+func TestConnectionFormSocketTarget(t *testing.T) {
+	index := -1
+	for i, protocol := range dialogProtocols {
+		if protocol.transport == transportSocket {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		t.Skip("Unix-domain sockets are not offered on this platform")
+	}
+
+	form := newConnectionForm()
+	form.selectProtocol(index)
+	form.username.set("alice")
+	form.password.set("secret")
+	form.host.set("/run/user/1000/xpra/100")
+
+	target, err := form.target()
+	if err != nil {
+		t.Fatalf("target: %v", err)
+	}
+	if target.transport != transportSocket {
+		t.Errorf("transport = %q, want socket", target.transport)
+	}
+	if target.address != "/run/user/1000/xpra/100" {
+		t.Errorf("address = %q, want socket path", target.address)
+	}
+	if target.username != "alice" || target.password != "secret" {
+		t.Errorf("credentials = %q/%q, want alice/secret", target.username, target.password)
+	}
+	if form.port.string() != "" {
+		t.Errorf("port = %q, want empty", form.port.string())
+	}
+
+	form.focus = focusHost
+	form.key(ui.Key{Name: "Tab", Pressed: true})
+	if form.focus != focusCancel {
+		t.Errorf("focus = %d, want cancel (%d)", form.focus, focusCancel)
+	}
+}
+
+func TestConnectionFormRejectsInvalidSocketPath(t *testing.T) {
+	index := -1
+	for i, protocol := range dialogProtocols {
+		if protocol.transport == transportSocket {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		t.Skip("Unix-domain sockets are not offered on this platform")
+	}
+
+	form := newConnectionForm()
+	form.selectProtocol(index)
+	form.host.set("relative/xpra.sock")
+	if _, err := form.target(); err == nil || !strings.Contains(err.Error(), "must be absolute") {
+		t.Fatalf("target error = %v, want absolute-path validation error", err)
+	}
+}
+
 func TestConnectionFormTargetValidation(t *testing.T) {
 	tests := []struct {
 		name string

@@ -5,8 +5,8 @@
 # go-xpra
 
 A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP, TLS,
-WebSocket or SSH and shows the forwarded windows on the local desktop — X11 or Wayland on Linux,
-Win32 on Windows.
+WebSocket, SSH or a Unix-domain socket and shows the forwarded windows on the local desktop — X11
+or Wayland on Linux, Win32 on Windows.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -73,15 +73,27 @@ An SSH password included in the URL is passed to `sshpass` through its `SSHPASS`
 variable rather than copying it into the spawned `sshpass` or `ssh` arguments. Supplying one
 therefore requires `sshpass` in `PATH`.
 
+On Unix-like systems, local connections use Xpra's standard
+`socket://[username[:password]@]/absolute/path` form. `unix://` is accepted as an alias:
+
+```shell
+./go-xpra socket:///run/user/1000/xpra/100
+```
+
+The socket path must be absolute. Linux abstract-namespace sockets and automatic display-name
+lookup are not currently supported.
+
 Running `./go-xpra` without any arguments opens a connection dialog instead. It offers the
-supported `tcp`, `ssl`, `ws`, `wss` and `ssh` protocols and fills in the protocol's default port
-automatically. WebSockets expose an endpoint path field, and SSH exposes an optional display
-field. The SSH password field is the SSH login password; for TCP, TLS and WebSockets it is the
-Xpra protocol password.
+supported `tcp`, `ssl`, `ws`, `wss` and `ssh` protocols, plus `socket` on Unix-like systems, and
+fills in the protocol's default port automatically. WebSockets expose an endpoint path field, SSH
+exposes an optional display field, and socket connections expose an absolute path field. The SSH
+password field is the SSH login password; for every other transport it is the Xpra protocol
+password.
 
 `--ssl-insecure` disables certificate and hostname verification for local testing and logs a
 warning; it cannot be combined with `--ssl-ca-cert`. SSL options are rejected with `tcp://` URLs.
-They are also rejected with `ws://` and `ssh://` URLs, and apply to both `ssl://` and `wss://`.
+They are also rejected with `ws://`, `ssh://` and socket URLs, and apply to both `ssl://` and
+`wss://`.
 Credentials can be included in any supported URL. An omitted user name falls back to `USER` (or
 `USERNAME` on Windows). When an authenticated Xpra server challenges a connection with no Xpra
 password, the client first checks `XPRA_PASSWORD`, then uses `pinentry` on Linux with a hidden
@@ -101,8 +113,9 @@ Pass `--backend wayland` to use the compositor directly anyway.
 
 ## What it does
 
-- plain TCP, TLS, WebSocket, secure WebSocket and SSH-subprocess transports, `rencodeplus` packet
-  encoding, inbound `lz4` decompression, and out-of-band binary chunk reassembly
+- plain TCP, TLS, WebSocket, secure WebSocket, SSH-subprocess and Unix-domain socket transports,
+  `rencodeplus` packet encoding, inbound `lz4` decompression, and out-of-band binary chunk
+  reassembly
 - password authentication (the `hmac+sha256` challenge)
 - window create, destroy, move/resize, raise, minimize/restore, title changes, and
   override-redirect popups

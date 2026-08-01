@@ -108,6 +108,16 @@ func Dial(address string) (*Conn, error) {
 	return New(netConn), nil
 }
 
+// DialUnix connects to an xpra server over a Unix-domain socket and starts
+// the read/write loops.
+func DialUnix(path string) (*Conn, error) {
+	netConn, err := net.Dial("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	return New(netConn), nil
+}
+
 // DialTLS connects to an xpra server over TLS and starts the read/write loops.
 // The caller owns the TLS policy, including roots and hostname verification.
 func DialTLS(address string, config *tls.Config) (*Conn, error) {

@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"net"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"unicode"
@@ -40,13 +41,19 @@ type dialogProtocol struct {
 	transport   connectionTransport
 }
 
-var dialogProtocols = []dialogProtocol{
-	{name: "tcp", defaultPort: defaultTCPPort, transport: transportTCP},
-	{name: "ssl", defaultPort: defaultTCPPort, transport: transportSSL},
-	{name: "ws", defaultPort: defaultWSPort, transport: transportWS},
-	{name: "wss", defaultPort: defaultWSSPort, transport: transportWSS},
-	{name: "ssh", defaultPort: defaultSSHPort, transport: transportSSH},
-}
+var dialogProtocols = func() []dialogProtocol {
+	protocols := []dialogProtocol{
+		{name: "tcp", defaultPort: defaultTCPPort, transport: transportTCP},
+		{name: "ssl", defaultPort: defaultTCPPort, transport: transportSSL},
+		{name: "ws", defaultPort: defaultWSPort, transport: transportWS},
+		{name: "wss", defaultPort: defaultWSSPort, transport: transportWSS},
+		{name: "ssh", defaultPort: defaultSSHPort, transport: transportSSH},
+	}
+	if runtime.GOOS != "windows" {
+		protocols = append(protocols, dialogProtocol{name: "socket", transport: transportSocket})
+	}
+	return protocols
+}()
 
 type textInput struct {
 	text   []rune
@@ -128,7 +135,11 @@ func (f *connectionForm) selectProtocol(index int) {
 }
 
 func (f *connectionForm) inputForFocus() *textInput {
-	switch f.focus {
+	return f.inputFor(f.focus)
+}
+
+func (f *connectionForm) inputFor(focus int) *textInput {
+	switch focus {
 	case focusUsername:
 		return &f.username
 	case focusPassword:
@@ -136,6 +147,9 @@ func (f *connectionForm) inputForFocus() *textInput {
 	case focusHost:
 		return &f.host
 	case focusPort:
+		if f.socketSelected() {
+			return nil
+		}
 		return &f.port
 	case focusDisplay:
 		if f.sshSelected() {
@@ -159,11 +173,51 @@ func (f *connectionForm) webSocketSelected() bool {
 	return transport == transportWS || transport == transportWSS
 }
 
+func (f *connectionForm) socketSelected() bool {
+	return dialogProtocols[f.protocol].transport == transportSocket
+}
+
 func (f *connectionForm) extraSelected() bool {
 	return f.sshSelected() || f.webSocketSelected()
 }
 
+func (f *connectionForm) visibleInputFocuses() []int {
+	if f.socketSelected() {
+		return []int{focusUsername, focusPassword, focusHost}
+	}
+	focuses := []int{focusUsername, focusPassword, focusHost, focusPort}
+	if f.extraSelected() {
+		focuses = append(focuses, focusDisplay)
+	}
+	return focuses
+}
+
+func (f *connectionForm) focusVisible(focus int) bool {
+	if focus < focusUsername || focus > focusDisplay {
+		return true
+	}
+	for _, visible := range f.visibleInputFocuses() {
+		if focus == visible {
+			return true
+		}
+	}
+	return false
+}
+
 func (f *connectionForm) target() (connectionURL, error) {
+	protocol := dialogProtocols[f.protocol]
+	if protocol.transport == transportSocket {
+		path := strings.TrimSpace(f.host.string())
+		if err := validateSocketPath(path); err != nil {
+			return connectionURL{}, err
+		}
+		return connectionURL{
+			transport: transportSocket,
+			address:   path,
+			username:  f.username.string(),
+			password:  f.password.string(),
+		}, nil
+	}
 	host := strings.TrimSpace(f.host.string())
 	if host == "" {
 		return connectionURL{}, fmt.Errorf("Host is required")
@@ -178,7 +232,6 @@ func (f *connectionForm) target() (connectionURL, error) {
 		return connectionURL{}, fmt.Errorf("Port must be between 1 and 65535")
 	}
 	port = strconv.FormatUint(number, 10)
-	protocol := dialogProtocols[f.protocol]
 	if protocol.transport == transportSSH && strings.HasPrefix(host, "-") {
 		return connectionURL{}, fmt.Errorf("Host cannot begin with -")
 	}
@@ -363,13 +416,10 @@ func (f *connectionForm) click(x, y int) int {
 		f.dropdownOpen = !f.dropdownOpen
 		return -1
 	}
-	inputCount := 4
-	if f.extraSelected() {
-		inputCount = len(layout.inputs)
-	}
-	for index, field := range layout.inputs[:inputCount] {
+	for _, focus := range f.visibleInputFocuses() {
+		field := layout.inputs[focus-focusUsername]
 		if field.contains(x, y) {
-			f.focus = focusUsername + index
+			f.focus = focus
 			f.dropdownOpen = false
 			return -1
 		}
@@ -400,7 +450,7 @@ func (f *connectionForm) key(event ui.Key) int {
 		}
 		for {
 			f.focus = (f.focus + direction + focusCount) % focusCount
-			if f.focus != focusDisplay || f.extraSelected() {
+			if f.focusVisible(f.focus) {
 				break
 			}
 		}
@@ -513,24 +563,26 @@ func paintConnectionForm(window ui.Window, form *connectionForm) error {
 	labels := []struct {
 		text string
 		y    int
-	}{
-		{"Protocol", layout.protocol.y},
-		{"Username", layout.inputs[0].y},
-		{"Password", layout.inputs[1].y},
-		{"Host", layout.inputs[2].y},
-		{"Port", layout.inputs[3].y},
+	}{{"Protocol", layout.protocol.y}}
+	fieldLabels := map[int]string{
+		focusUsername: "Username",
+		focusPassword: "Password",
+		focusHost:     "Host",
+		focusPort:     "Port",
 	}
 	if form.sshSelected() {
-		labels[2].text = "SSH Password"
-		labels = append(labels, struct {
-			text string
-			y    int
-		}{"Display", layout.inputs[4].y})
+		fieldLabels[focusPassword] = "SSH Password"
+		fieldLabels[focusDisplay] = "Display"
 	} else if form.webSocketSelected() {
+		fieldLabels[focusDisplay] = "Path"
+	} else if form.socketSelected() {
+		fieldLabels[focusHost] = "Socket path"
+	}
+	for _, focus := range form.visibleInputFocuses() {
 		labels = append(labels, struct {
 			text string
 			y    int
-		}{"Path", layout.inputs[4].y})
+		}{fieldLabels[focus], layout.inputs[focus-focusUsername].y})
 	}
 	for _, label := range labels {
 		drawText(canvas, 24, label.y+22, label.text, dialogColors.text)
@@ -542,17 +594,12 @@ func paintConnectionForm(window ui.Window, form *connectionForm) error {
 	arrowX := layout.protocol.x + layout.protocol.width - 18
 	drawText(canvas, arrowX, layout.protocol.y+21, "v", dialogColors.muted)
 
-	inputs := []*textInput{&form.username, &form.password, &form.host, &form.port}
-	if form.sshSelected() {
-		inputs = append(inputs, &form.display)
-	} else if form.webSocketSelected() {
-		inputs = append(inputs, &form.path)
-	}
-	for index, input := range inputs {
-		field := layout.inputs[index]
-		focused := form.focus == focusUsername+index
+	for _, focus := range form.visibleInputFocuses() {
+		input := form.inputFor(focus)
+		field := layout.inputs[focus-focusUsername]
+		focused := form.focus == focus
 		drawField(canvas, field, focused)
-		drawInput(canvas, field, input, index == 1, focused)
+		drawInput(canvas, field, input, focus == focusPassword, focused)
 	}
 
 	drawButton(canvas, layout.cancel, "Cancel", form.focus == focusCancel, false)

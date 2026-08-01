@@ -1,6 +1,7 @@
 // Command go-xpra is a minimal xpra client: it connects to a server over TCP,
-// TLS, WebSocket or SSH and displays the forwarded windows on the local
-// desktop, through X11 or Wayland on Linux and through Win32 on Windows.
+// TLS, WebSocket, SSH or a Unix-domain socket and displays the forwarded
+// windows on the local desktop, through X11 or Wayland on Linux and through
+// Win32 on Windows.
 //
 // It supports raw RGB, JPEG, PNG and WebP pixels, and needs no cgo. See the
 // README for what is and is not implemented.
@@ -36,11 +37,12 @@ const (
 type connectionTransport string
 
 const (
-	transportTCP connectionTransport = "tcp"
-	transportSSL connectionTransport = "ssl"
-	transportSSH connectionTransport = "ssh"
-	transportWS  connectionTransport = "ws"
-	transportWSS connectionTransport = "wss"
+	transportTCP    connectionTransport = "tcp"
+	transportSSL    connectionTransport = "ssl"
+	transportSSH    connectionTransport = "ssh"
+	transportWS     connectionTransport = "ws"
+	transportWSS    connectionTransport = "wss"
+	transportSocket connectionTransport = "socket"
 )
 
 type connectionURL struct {
@@ -105,19 +107,21 @@ func usage() {
        go-xpra [OPTIONS] (tcp|ssl)://[USERNAME[:PASSWORD]@]HOST[:PORT]/
        go-xpra [OPTIONS] (ws|wss)://[USERNAME[:PASSWORD]@]HOST[:PORT]/[PATH][?QUERY]
        go-xpra [OPTIONS] ssh://[USERNAME[:PASSWORD]@]HOST[:PORT]/[DISPLAY]
+       go-xpra [OPTIONS] (socket|unix)://[USERNAME[:PASSWORD]@]/ABSOLUTE/PATH
 
 Connects to an xpra server and shows its windows on the local desktop.
 The default TCP/SSL port is 14500, WS/WSS use 80/443, and SSH uses 22.
+socket:// connects to a local Unix-domain socket; unix:// is an alias.
 ssl:// and wss:// verify the server certificate and hostname using the system
 trust store unless an SSL option says otherwise.
 
 With no arguments, a connection dialog collects the protocol, credentials,
-host, port and optional SSH display.
+network address or local socket path, and optional SSH display.
 
 When credentials are omitted from the URL, the local user name is used.
-For TCP/SSL/WS/WSS, passwords come from XPRA_PASSWORD or an interactive
-system prompt. SSH authentication uses the system ssh client; a password in
-an SSH URL is supplied through sshpass.
+For TCP/SSL/WS/WSS/socket, passwords come from XPRA_PASSWORD or an
+interactive system prompt. SSH authentication uses the system ssh client; a
+password in an SSH URL is supplied through sshpass.
 
 Example:
   xpra start :100 --bind-tcp=127.0.0.1:14500 --start=xterm
@@ -131,6 +135,9 @@ For a WebSocket endpoint behind an HTTPS reverse proxy:
 
 For an existing Xpra display reached through SSH:
   go-xpra ssh://alice@server.example.com/100
+
+For a local Xpra Unix-domain socket:
+  go-xpra socket:///run/user/1000/xpra/100
 
 `)
 	printOptionDefaults(os.Stderr, flag.CommandLine)
@@ -270,6 +277,8 @@ func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.
 		}
 	case transportTCP:
 		conn, err = protocol.Dial(target.address)
+	case transportSocket:
+		conn, err = protocol.DialUnix(target.address)
 	case transportWS:
 		conn, err = protocol.DialWebSocket(target.webSocketURL(), nil)
 	default:
@@ -305,7 +314,7 @@ func (target connectionURL) webSocketURL() string {
 	}).String()
 }
 
-// parseConnectionURL accepts the standard Xpra TCP, SSL, WS, WSS and SSH URL
+// parseConnectionURL accepts the standard Xpra TCP, SSL, WS, WSS, SSH and socket URL
 // forms and returns connection details separately from credentials so
 // passwords never reach logs or the WebSocket HTTP handshake URL.
 func parseConnectionURL(raw string) (connectionURL, error) {
@@ -318,15 +327,38 @@ func parseConnectionURL(raw string) (connectionURL, error) {
 	}
 	scheme := strings.ToLower(u.Scheme)
 	transport := connectionTransport(scheme)
+	if transport == "unix" {
+		transport = transportSocket
+	}
 	if transport != transportTCP && transport != transportSSL && transport != transportSSH &&
-		transport != transportWS && transport != transportWSS {
+		transport != transportWS && transport != transportWSS && transport != transportSocket {
 		if u.Scheme == "" {
 			return connectionURL{}, fmt.Errorf(
-				"invalid Xpra URL: a tcp://, ssl://, ws://, wss:// or ssh:// URL is required")
+				"invalid Xpra URL: a tcp://, ssl://, ws://, wss://, ssh://, socket:// or unix:// URL is required")
 		}
 		return connectionURL{}, fmt.Errorf(
-			"unsupported Xpra URL protocol %q: only tcp, ssl, ws, wss and ssh are supported",
+			"unsupported Xpra URL protocol %q: only tcp, ssl, ws, wss, ssh, socket and unix are supported",
 			u.Scheme)
+	}
+	if transport == transportSocket {
+		if u.Opaque != "" || !strings.HasPrefix(strings.ToLower(raw), scheme+"://") {
+			return connectionURL{}, fmt.Errorf("invalid Xpra socket URL: use socket:///absolute/path")
+		}
+		if u.Host != "" {
+			return connectionURL{}, fmt.Errorf("invalid Xpra socket URL: host and port are not supported")
+		}
+		if u.RawQuery != "" || u.Fragment != "" {
+			return connectionURL{}, fmt.Errorf("invalid Xpra socket URL: query and fragment are not supported")
+		}
+		if err := validateSocketPath(u.Path); err != nil {
+			return connectionURL{}, fmt.Errorf("invalid Xpra socket URL: %w", err)
+		}
+		target := connectionURL{transport: transportSocket, address: u.Path}
+		if u.User != nil {
+			target.username = u.User.Username()
+			target.password, _ = u.User.Password()
+		}
+		return target, nil
 	}
 	if u.Opaque != "" || u.Host == "" {
 		return connectionURL{}, fmt.Errorf("invalid Xpra %s URL: host is required", strings.ToUpper(scheme))
@@ -406,6 +438,19 @@ func parseConnectionURL(raw string) (connectionURL, error) {
 		target.password, _ = u.User.Password()
 	}
 	return target, nil
+}
+
+func validateSocketPath(path string) error {
+	if path == "" || path == "/" {
+		return fmt.Errorf("socket path is required")
+	}
+	if !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("socket path must be absolute")
+	}
+	if strings.IndexByte(path, 0) >= 0 {
+		return fmt.Errorf("socket path cannot contain NUL")
+	}
+	return nil
 }
 
 func makeTLSConfig(target connectionURL, options sslOptions) (*tls.Config, error) {

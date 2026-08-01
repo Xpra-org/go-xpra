@@ -263,6 +263,20 @@ func TestParseConnectionURL(t *testing.T) {
 			port:       "2222",
 			transport:  transportSSH,
 		},
+		{
+			name:      "Unix socket",
+			raw:       "socket:///run/user/1000/xpra/100",
+			address:   "/run/user/1000/xpra/100",
+			transport: transportSocket,
+		},
+		{
+			name:      "Unix alias with credentials and escaped path",
+			raw:       "UNIX://alice:p%40ss@/tmp/xpra%20socket",
+			address:   "/tmp/xpra socket",
+			username:  "alice",
+			password:  "p@ss",
+			transport: transportSocket,
+		},
 	}
 
 	for _, tt := range tests {
@@ -326,6 +340,12 @@ func TestParseConnectionURLRejectsUnsupportedURLs(t *testing.T) {
 		{name: "empty port", raw: "tcp://example.com:/"},
 		{name: "large port", raw: "tcp://example.com:65536/"},
 		{name: "named port", raw: "tcp://example.com:xpra/"},
+		{name: "socket missing path", raw: "socket:///"},
+		{name: "socket missing authority marker", raw: "socket:/tmp/xpra"},
+		{name: "socket host", raw: "socket://localhost/tmp/xpra"},
+		{name: "socket query", raw: "socket:///tmp/xpra?session=100"},
+		{name: "socket fragment", raw: "unix:///tmp/xpra#session"},
+		{name: "socket NUL", raw: "socket:///tmp/xpra%00bad"},
 	}
 
 	for _, tt := range tests {
@@ -449,6 +469,7 @@ func TestMakeTLSConfigRejectsInvalidOptions(t *testing.T) {
 	plain := connectionURL{transport: transportTCP, serverName: "example.com"}
 	ssh := connectionURL{transport: transportSSH, serverName: "example.com"}
 	ws := connectionURL{transport: transportWS, serverName: "example.com"}
+	socket := connectionURL{transport: transportSocket, address: "/tmp/xpra"}
 
 	tests := []struct {
 		name    string
@@ -458,6 +479,7 @@ func TestMakeTLSConfigRejectsInvalidOptions(t *testing.T) {
 		{name: "SSL option with TCP", target: plain, options: sslOptions{insecure: true}},
 		{name: "SSL option with SSH", target: ssh, options: sslOptions{insecure: true}},
 		{name: "SSL option with WS", target: ws, options: sslOptions{insecure: true}},
+		{name: "SSL option with socket", target: socket, options: sslOptions{insecure: true}},
 		{name: "conflicting SSL options", target: secure, options: sslOptions{caCert: "ca.pem", insecure: true}},
 		{name: "missing CA file", target: secure, options: sslOptions{caCert: filepath.Join(t.TempDir(), "missing.pem")}},
 	}
