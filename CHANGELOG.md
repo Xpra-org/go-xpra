@@ -2,6 +2,7 @@
 ## [Unreleased]
 * Features:
   * add bidirectional UTF-8 text clipboard synchronization on X11, Wayland and Windows
+  * [avoid crashes when optional clipboard initialization fails](https://github.com/Xpra-org/go-xpra/commit/dcea4a827cc921a46e18e7012703faecb00f61d7)
 ## [0.2.3] 2026-08-01
 * TODO
 
