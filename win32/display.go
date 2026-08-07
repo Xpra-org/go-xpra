@@ -108,6 +108,13 @@ func Open() (*Display, error) {
 // loop ends.
 func (d *Display) Events() <-chan ui.Event { return d.events }
 
+// DesktopSize returns the bounding rectangle of all monitors in physical
+// pixels. Windows exposes this through the virtual-screen system metrics.
+func (d *Display) DesktopSize() (int, int, bool) {
+	width, height := systemMetrics(smCxVirtualScreen), systemMetrics(smCyVirtualScreen)
+	return width, height, width > 0 && height > 0
+}
+
 // Bell plays a real tone without blocking the client or window thread. Win32
 // supports the requested pitch and duration but has no equivalent for X11's
 // relative volume or named bell.

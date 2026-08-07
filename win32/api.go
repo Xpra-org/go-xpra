@@ -63,6 +63,7 @@ var (
 	procMapVirtualKey                 = user32.NewProc("MapVirtualKeyW")
 	procSetProcessDPI                 = user32.NewProc("SetProcessDPIAware")
 	procSetDPIContext                 = user32.NewProc("SetProcessDpiAwarenessContext")
+	procGetSystemMetrics              = user32.NewProc("GetSystemMetrics")
 	procOpenClipboard                 = user32.NewProc("OpenClipboard")
 	procCloseClipboard                = user32.NewProc("CloseClipboard")
 	procEmptyClipboard                = user32.NewProc("EmptyClipboard")
@@ -112,7 +113,14 @@ const (
 	idcArrow           = 32512
 	idiApplication     = 32512
 	dpiPerMonitorAware = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, (HANDLE)-4
+	smCxVirtualScreen  = 78
+	smCyVirtualScreen  = 79
 )
+
+func systemMetrics(index int) int {
+	r, _, _ := procGetSystemMetrics.Call(uintptr(index))
+	return int(int32(r))
+}
 
 // The messages the window procedure acts on.
 const (

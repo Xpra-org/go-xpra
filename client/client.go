@@ -158,6 +158,13 @@ func (c *Client) debugf(format string, args ...any) {
 
 func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
 	caps := buildHello(c.username, c.clipboard != nil)
+	if provider, ok := c.display.(ui.DesktopSizeProvider); ok {
+		if width, height, valid := provider.DesktopSize(); valid {
+			// Xpra's desktop_size is the bounding desktop rectangle, in
+			// physical pixels. Keep it optional for backends without this data.
+			caps.Set("desktop_size", []any{width, height})
+		}
+	}
 	if c.mmap != nil {
 		caps.Set("mmap", c.mmap.helloCaps())
 	}

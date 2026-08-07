@@ -103,6 +103,13 @@ type Display interface {
 	Close()
 }
 
+// DesktopSizeProvider is implemented by backends that can report the overall
+// desktop area in physical pixels. It is optional because some compositors do
+// not expose output geometry to ordinary clients.
+type DesktopSizeProvider interface {
+	DesktopSize() (width, height int, ok bool)
+}
+
 // Clipboard is the text clipboard exposed by a desktop backend.
 //
 // It is deliberately smaller than Display because clipboard support is an

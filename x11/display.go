@@ -131,6 +131,12 @@ func (d *Display) Bell(percent, _pitch, _duration int64, _name string) {
 // Depth returns the root window's depth, which is what all our windows use.
 func (d *Display) Depth() byte { return d.X.Screen().RootDepth }
 
+// DesktopSize returns the X screen's root dimensions in physical pixels.
+func (d *Display) DesktopSize() (int, int, bool) {
+	screen := d.X.Screen()
+	return int(screen.WidthInPixels), int(screen.HeightInPixels), true
+}
+
 // Close tears down the X connection, which also stops the event loop.
 func (d *Display) Close() {
 	select {
