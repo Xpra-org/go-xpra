@@ -22,7 +22,7 @@ func (c *Client) handleMotion(e ui.Motion) {
 		return
 	}
 	c.send("pointer-motion", deviceID, 0, wid,
-		[]any{e.X, e.Y}, rencodeplus.Dict{})
+		[]any{e.X, e.Y}, c.pointerProperties(e.X, e.Y))
 }
 
 // handleButton forwards a button press or release.
@@ -47,11 +47,11 @@ func (c *Client) handleButton(e ui.Button) {
 			distance = -distance
 		}
 		c.send(packetType, wid, e.Button, distance,
-			[]any{e.X, e.Y}, []string{}, []int{}, rencodeplus.Dict{})
+			[]any{e.X, e.Y}, []string{}, []int{}, c.pointerProperties(e.X, e.Y))
 		return
 	}
 	c.send("pointer-button", deviceID, 0, wid, e.Button, e.Pressed,
-		[]any{e.X, e.Y}, rencodeplus.Dict{})
+		[]any{e.X, e.Y}, c.pointerProperties(e.X, e.Y))
 }
 
 // handleKey forwards a key press or release.

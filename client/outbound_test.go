@@ -101,6 +101,9 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 		windowMap.Int(4) != 2 || windowMap.Int(5) != 1 {
 		t.Errorf("window-map geometry is wrong: %v", windowMap)
 	}
+	if len(windowMap) != 8 {
+		t.Errorf("window-map without monitors has %d elements, want 8: %v", len(windowMap), windowMap)
+	}
 
 	client.handleConfigure(ui.Configure{Window: window.id, X: 11, Y: 21, Width: 3, Height: 2})
 	windowConfigure := receiveOutbound(t, server, "window-configure")
@@ -112,12 +115,21 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 	}) {
 		t.Errorf("window-configure geometry = %#v", got)
 	}
+	if windowConfigure.Dict(2).Has("monitor") {
+		t.Errorf("window-configure invented a monitor descriptor: %v", windowConfigure)
+	}
 
 	client.handleMotion(ui.Motion{Window: window.id, X: 12, Y: 22})
-	receiveOutbound(t, server, "pointer-motion")
+	motion := receiveOutbound(t, server, "pointer-motion")
+	if len(motion.Dict(5)) != 0 {
+		t.Errorf("pointer-motion invented monitor properties: %v", motion)
+	}
 
 	client.handleButton(ui.Button{Window: window.id, Button: 1, Pressed: true, X: 12, Y: 22})
-	receiveOutbound(t, server, "pointer-button")
+	button := receiveOutbound(t, server, "pointer-button")
+	if len(button.Dict(7)) != 0 {
+		t.Errorf("pointer-button invented monitor properties: %v", button)
+	}
 
 	client.handleKey(ui.Key{
 		Window: window.id, Name: "a", Pressed: true, Modifiers: []string{"shift"},
@@ -259,4 +271,63 @@ func TestWheelPacketTypeAndShape(t *testing.T) {
 			receiveOutbound(t, server, "pointer-button")
 		})
 	}
+}
+
+func TestPositionPacketsIncludeMonitorRelativeCoordinates(t *testing.T) {
+	setBackwardsCompatible(t, false)
+	client, server, window := outboundHarness(t)
+	client.monitors = usableMonitors([]ui.Monitor{
+		{}, // invalid monitors must not consume an advertised index
+		{Geometry: ui.Rectangle{X: -1920, Width: 1920, Height: 1080}},
+		{Geometry: ui.Rectangle{Width: 2560, Height: 1440}},
+	})
+
+	assertMonitor := func(packet protocol.Packet, field int, key string, index, x, y int64) {
+		t.Helper()
+		descriptor := packet.Dict(field)
+		if key != "" {
+			descriptor = descriptor.Dict(key)
+		}
+		if descriptor == nil {
+			t.Fatalf("%s monitor descriptor is missing: %v", packet.Type(), packet)
+		}
+		if descriptor.Int("index") != index {
+			t.Errorf("%s monitor index = %d, want %d", packet.Type(), descriptor.Int("index"), index)
+		}
+		if got := descriptor["position"]; !reflect.DeepEqual(got, []any{x, y}) {
+			t.Errorf("%s monitor position = %#v, want [%d %d]", packet.Type(), got, x, y)
+		}
+	}
+
+	client.handleNewWindow(protocol.Packet{
+		"window-create", int64(7), int64(-1800), int64(100), int64(640), int64(480),
+		map[string]any{}, map[string]any{},
+	}, false)
+	windowMap := receiveOutbound(t, server, "window-map")
+	if len(windowMap) != 9 {
+		t.Fatalf("window-map has %d elements, want monitor field at index 8: %v", len(windowMap), windowMap)
+	}
+	assertMonitor(windowMap, 8, "", 0, 120, 100)
+
+	// A window origin may be outside every monitor while the rest of the
+	// window remains visible. It still gets a stable monitor anchor and a
+	// deliberately negative relative position.
+	client.handleConfigure(ui.Configure{
+		Window: window.id, X: -1930, Y: -10, Width: 640, Height: 480,
+	})
+	windowConfigure := receiveOutbound(t, server, "window-configure")
+	assertMonitor(windowConfigure, 2, "monitor", 0, -10, -10)
+
+	client.handleMotion(ui.Motion{Window: window.id, X: 100, Y: 50})
+	assertMonitor(receiveOutbound(t, server, "pointer-motion"), 5, "monitor", 1, 100, 50)
+
+	client.handleButton(ui.Button{
+		Window: window.id, Button: 1, Pressed: true, X: -10, Y: 500,
+	})
+	assertMonitor(receiveOutbound(t, server, "pointer-button"), 7, "monitor", 0, 1910, 500)
+
+	client.handleButton(ui.Button{
+		Window: window.id, Button: 4, Pressed: true, X: 200, Y: 60,
+	})
+	assertMonitor(receiveOutbound(t, server, "pointer-wheel"), 7, "monitor", 1, 200, 60)
 }

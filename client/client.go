@@ -39,6 +39,7 @@ type Client struct {
 
 	windows   map[int64]ui.Window   // xpra window id -> local window
 	byLocal   map[ui.WindowID]int64 // local window id -> xpra window id
+	monitors  []ui.Monitor          // valid monitor layout advertised in hello
 	focused   int64
 	clipboard ui.Clipboard
 
@@ -170,9 +171,12 @@ func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
 		}
 	}
 	if provider, ok := c.display.(ui.MonitorProvider); ok {
-		if monitors := monitorCaps(provider.Monitors()); len(monitors) != 0 {
+		c.monitors = usableMonitors(provider.Monitors())
+		if monitors := monitorCaps(c.monitors); len(monitors) != 0 {
 			displayCaps.Set("monitors", monitors)
 		}
+	} else {
+		c.monitors = nil
 	}
 	caps.Set("display", displayCaps)
 	if c.mmap != nil {
@@ -562,7 +566,12 @@ func (c *Client) handleNewWindow(packet protocol.Packet, overrideRedirect bool) 
 	// windows are never mapped by the client — the server damages them itself,
 	// and it warns if we send a map for one.
 	if !overrideRedirect {
-		c.send("window-map", wid, x, y, width, height, rencodeplus.Dict{}, rencodeplus.Dict{})
+		mapPacket := []any{"window-map", wid, x, y, width, height,
+			rencodeplus.Dict{}, rencodeplus.Dict{}}
+		if monitor, ok := c.windowMonitorDescriptor(x, y); ok {
+			mapPacket = append(mapPacket, monitor)
+		}
+		c.send(mapPacket...)
 	}
 }
 
@@ -845,9 +854,13 @@ func (c *Client) handleConfigure(e ui.Configure) {
 		log.Printf("window %d: %v", wid, err)
 		return
 	}
-	c.send("window-configure", wid, rencodeplus.Dict{
+	config := rencodeplus.Dict{
 		{Key: "geometry", Value: []any{e.X, e.Y, e.Width, e.Height}},
-	})
+	}
+	if monitor, ok := c.windowMonitorDescriptor(e.X, e.Y); ok {
+		config.Set("monitor", monitor)
+	}
+	c.send("window-configure", wid, config)
 }
 
 // handleCloseRequest passes the user's close request to the server, which owns

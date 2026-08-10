@@ -261,6 +261,9 @@ func TestHelloIncludesPerMonitorCapabilities(t *testing.T) {
 	if err := client.sendHello("", nil); err != nil {
 		t.Fatalf("sendHello: %v", err)
 	}
+	if len(client.monitors) != 1 || client.monitors[0].Name != "DP-1" {
+		t.Fatalf("advertised monitor snapshot = %#v", client.monitors)
+	}
 	hello := receiveOutbound(t, server, "hello").Dict(1)
 	display := hello.Dict("display")
 	if display == nil {
