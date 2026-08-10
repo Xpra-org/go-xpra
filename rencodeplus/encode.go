@@ -24,6 +24,7 @@ import (
 //	[]any, []string  list
 //	Dict             dict, in insertion order
 //	map[string]any   dict, in sorted key order
+//	map[int]any      integer-keyed dict, in sorted key order
 func Encode(v any) ([]byte, error) {
 	var buf []byte
 	buf, err := encode(buf, v)
@@ -116,6 +117,20 @@ func encode(buf []byte, v any) ([]byte, error) {
 		sort.Strings(keys)
 		return encodeDict(buf, len(keys), func(buf []byte, i int) ([]byte, error) {
 			buf = encodeString(buf, keys[i])
+			return encode(buf, x[keys[i]])
+		})
+	case map[int]any:
+		keys := make([]int, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Ints(keys)
+		return encodeDict(buf, len(keys), func(buf []byte, i int) ([]byte, error) {
+			var err error
+			buf, err = encodeInt(buf, int64(keys[i]))
+			if err != nil {
+				return nil, err
+			}
 			return encode(buf, x[keys[i]])
 		})
 	}

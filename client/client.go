@@ -158,13 +158,23 @@ func (c *Client) debugf(format string, args ...any) {
 
 func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
 	caps := buildHello(c.username, c.clipboard != nil)
+	displayCaps := rencodeplus.Dict{
+		{Key: "show-desktop", Value: true},
+	}
 	if provider, ok := c.display.(ui.DesktopSizeProvider); ok {
 		if width, height, valid := provider.DesktopSize(); valid {
-			// Xpra's desktop_size is the bounding desktop rectangle, in
-			// physical pixels. Keep it optional for backends without this data.
-			caps.Set("desktop_size", []any{width, height})
+			// Xpra's desktop_size is the bounding desktop rectangle in the
+			// backend's window coordinates. Keep it optional when unavailable.
+			desktopSize := []any{width, height}
+			displayCaps.Set("desktop_size", desktopSize)
 		}
 	}
+	if provider, ok := c.display.(ui.MonitorProvider); ok {
+		if monitors := monitorCaps(provider.Monitors()); len(monitors) != 0 {
+			displayCaps.Set("monitors", monitors)
+		}
+	}
+	caps.Set("display", displayCaps)
 	if c.mmap != nil {
 		caps.Set("mmap", c.mmap.helloCaps())
 	}
@@ -175,6 +185,52 @@ func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
 		caps.Set("challenge_client_salt", clientSalt)
 	}
 	return c.conn.Send("hello", caps)
+}
+
+// monitorCaps translates the backend-neutral monitor descriptions to Xpra's
+// modern per-monitor capability dictionary. Its integer keys are part of the
+// protocol shape used by the reference client.
+func monitorCaps(monitors []ui.Monitor) map[int]any {
+	caps := make(map[int]any, len(monitors))
+	for _, monitor := range monitors {
+		if !monitor.Geometry.Valid() {
+			continue
+		}
+		info := rencodeplus.Dict{}
+		geometry := monitor.Geometry
+		info.Set("geometry", []any{geometry.X, geometry.Y, geometry.Width, geometry.Height})
+		if monitor.WorkArea.Valid() {
+			workarea := monitor.WorkArea
+			info.Set("workarea", []any{workarea.X, workarea.Y, workarea.Width, workarea.Height})
+		}
+		if monitor.Name != "" {
+			info.Set("name", monitor.Name)
+		}
+		if monitor.Manufacturer != "" {
+			info.Set("manufacturer", monitor.Manufacturer)
+		}
+		if monitor.Model != "" {
+			info.Set("model", monitor.Model)
+		}
+		if monitor.SubpixelLayout != "" {
+			info.Set("subpixel-layout", monitor.SubpixelLayout)
+		}
+		if monitor.WidthMM > 0 {
+			info.Set("width-mm", monitor.WidthMM)
+		}
+		if monitor.HeightMM > 0 {
+			info.Set("height-mm", monitor.HeightMM)
+		}
+		if monitor.RefreshRate > 0 {
+			info.Set("refresh-rate", monitor.RefreshRate)
+		}
+		if monitor.ScaleFactor > 0 {
+			info.Set("scale-factor", monitor.ScaleFactor)
+		}
+		info.Set("primary", monitor.Primary)
+		caps[len(caps)] = info
+	}
+	return caps
 }
 
 func (c *Client) handlePacket(packet protocol.Packet) {

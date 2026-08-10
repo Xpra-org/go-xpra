@@ -299,7 +299,7 @@ func TestDecodeRejectsMalformed(t *testing.T) {
 		"invalid tag":        "2d",
 		"trailing bytes":     "0000",
 		"bad length prefix":  "392f",
-		"non-string key":     "670001",
+		"invalid dict key":   "67c000",
 	}
 	for name, h := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -344,5 +344,26 @@ func TestEncodeMapIsDeterministic(t *testing.T) {
 		if !bytes.Equal(first, again) {
 			t.Fatalf("map encoding is not deterministic:\n%x\n%x", first, again)
 		}
+	}
+}
+
+func TestIntegerKeyedDictionary(t *testing.T) {
+	encoded, err := Encode(map[int]any{2: "third", 0: "first"})
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	// 68 is a two-item dictionary, followed immediately by the integer-zero
+	// tag. A string key would have an 81 length tag before its ASCII digit.
+	wantEncoded, _ := hex.DecodeString("680085666972737402857468697264")
+	if !bytes.Equal(encoded, wantEncoded) {
+		t.Errorf("encoded = %x, want integer keys encoded as %x", encoded, wantEncoded)
+	}
+	decoded, err := Decode(encoded)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	want := map[string]any{"0": "first", "2": "third"}
+	if !reflect.DeepEqual(decoded, want) {
+		t.Errorf("decoded = %#v, want %#v", decoded, want)
 	}
 }

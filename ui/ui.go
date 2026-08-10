@@ -104,10 +104,36 @@ type Display interface {
 }
 
 // DesktopSizeProvider is implemented by backends that can report the overall
-// desktop area in physical pixels. It is optional because some compositors do
-// not expose output geometry to ordinary clients.
+// desktop area in the same coordinate space as their windows. It is optional
+// because some compositors do not expose output geometry to ordinary clients.
 type DesktopSizeProvider interface {
 	DesktopSize() (width, height int, ok bool)
+}
+
+// Rectangle describes an area in desktop coordinates.
+type Rectangle struct {
+	X, Y, Width, Height int
+}
+
+// Valid reports whether the rectangle has a usable extent.
+func (r Rectangle) Valid() bool { return r.Width > 0 && r.Height > 0 }
+
+// Monitor describes one physical output. Values which a backend cannot obtain
+// are left at zero or empty and are omitted from the hello packet.
+// RefreshRate is expressed in millihertz, matching both Wayland and Xpra.
+type Monitor struct {
+	Name, Manufacturer, Model, SubpixelLayout string
+	Geometry, WorkArea                        Rectangle
+	WidthMM, HeightMM, RefreshRate            int
+	ScaleFactor                               int
+	Primary                                   bool
+}
+
+// MonitorProvider is implemented by backends which can enumerate individual
+// desktop outputs. The returned slice is ordered in the platform's native
+// monitor order.
+type MonitorProvider interface {
+	Monitors() []Monitor
 }
 
 // Clipboard is the text clipboard exposed by a desktop backend.

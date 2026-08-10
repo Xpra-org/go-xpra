@@ -74,6 +74,7 @@ type Display struct {
 
 var _ ui.Display = (*Display)(nil)
 var _ ui.SystemTrayProvider = (*Display)(nil)
+var _ ui.MonitorProvider = (*Display)(nil)
 
 // Open starts the window thread.
 //
@@ -113,6 +114,31 @@ func (d *Display) Events() <-chan ui.Event { return d.events }
 func (d *Display) DesktopSize() (int, int, bool) {
 	width, height := systemMetrics(smCxVirtualScreen), systemMetrics(smCyVirtualScreen)
 	return width, height, width > 0 && height > 0
+}
+
+// Monitors returns each active Win32 monitor's full rectangle, usable work
+// area, device name and primary status. The process opts into per-monitor DPI
+// awareness before Open, so these coordinates are physical desktop pixels.
+func (d *Display) Monitors() []ui.Monitor {
+	native := enumerateMonitors()
+	monitors := make([]ui.Monitor, 0, len(native))
+	for _, info := range native {
+		geometry := info.Monitor
+		work := info.Work
+		monitors = append(monitors, ui.Monitor{
+			Name: syscall.UTF16ToString(info.Device[:]),
+			Geometry: ui.Rectangle{
+				X: int(geometry.Left), Y: int(geometry.Top),
+				Width: int(geometry.Right - geometry.Left), Height: int(geometry.Bottom - geometry.Top),
+			},
+			WorkArea: ui.Rectangle{
+				X: int(work.Left), Y: int(work.Top),
+				Width: int(work.Right - work.Left), Height: int(work.Bottom - work.Top),
+			},
+			Primary: info.Flags&monitorInfoPrimary != 0,
+		})
+	}
+	return monitors
 }
 
 // Bell plays a real tone without blocking the client or window thread. Win32

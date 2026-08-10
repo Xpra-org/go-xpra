@@ -64,6 +64,8 @@ var (
 	procSetProcessDPI                 = user32.NewProc("SetProcessDPIAware")
 	procSetDPIContext                 = user32.NewProc("SetProcessDpiAwarenessContext")
 	procGetSystemMetrics              = user32.NewProc("GetSystemMetrics")
+	procEnumDisplayMonitors           = user32.NewProc("EnumDisplayMonitors")
+	procGetMonitorInfo                = user32.NewProc("GetMonitorInfoW")
 	procOpenClipboard                 = user32.NewProc("OpenClipboard")
 	procCloseClipboard                = user32.NewProc("CloseClipboard")
 	procEmptyClipboard                = user32.NewProc("EmptyClipboard")
@@ -115,6 +117,7 @@ const (
 	dpiPerMonitorAware = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, (HANDLE)-4
 	smCxVirtualScreen  = 78
 	smCyVirtualScreen  = 79
+	monitorInfoPrimary = 0x1
 )
 
 func systemMetrics(index int) int {
@@ -179,6 +182,30 @@ const (
 type point struct{ X, Y int32 }
 
 type rect struct{ Left, Top, Right, Bottom int32 }
+
+type monitorInfo struct {
+	Size    uint32
+	Monitor rect
+	Work    rect
+	Flags   uint32
+	Device  [32]uint16
+}
+
+// enumerateMonitors snapshots the active display monitors in the order Win32
+// supplies them. The callback is synchronous and is no longer retained when
+// EnumDisplayMonitors returns.
+func enumerateMonitors() []monitorInfo {
+	var monitors []monitorInfo
+	callback := syscall.NewCallback(func(handle, _hdc, _rect, _data uintptr) uintptr {
+		info := monitorInfo{Size: uint32(unsafe.Sizeof(monitorInfo{}))}
+		if ok, _, _ := procGetMonitorInfo.Call(handle, uintptr(unsafe.Pointer(&info))); ok != 0 {
+			monitors = append(monitors, info)
+		}
+		return 1
+	})
+	procEnumDisplayMonitors.Call(0, 0, callback, 0)
+	return monitors
+}
 
 type wndClassEx struct {
 	Size       uint32

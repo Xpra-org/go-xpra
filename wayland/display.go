@@ -40,6 +40,8 @@ const (
 	wmBaseVersion     = 1
 	decorationVersion = 1
 	iconVersion       = 1
+	// wl_output 4 adds stable output names and descriptions.
+	outputVersion = 4
 )
 
 // Display is a connection to the Wayland compositor and the globals the windows
@@ -63,6 +65,7 @@ type Display struct {
 	seat        *client.Seat
 	pointer     *client.Pointer
 	keyboard    *client.Keyboard
+	outputs     map[uint32]*outputInfo // registry name -> output
 
 	// decoration is nil on a compositor that draws no window frames — GNOME and
 	// weston both — in which case the windows have no title bar.
@@ -120,6 +123,7 @@ func Open() (*Display, error) {
 		display:    display,
 		ctx:        display.Context(),
 		windows:    map[uint32]*Window{},
+		outputs:    map[uint32]*outputInfo{},
 		keys:       &keymap{levels: map[uint32][]string{}},
 		eventQueue: ui.NewEventQueue(eventQueueSize),
 		events:     make(chan ui.Event),
@@ -134,6 +138,7 @@ func Open() (*Display, error) {
 		return nil, fmt.Errorf("getting the Wayland registry: %w", err)
 	}
 	d.registry.SetGlobalHandler(d.global)
+	d.registry.SetGlobalRemoveHandler(d.globalRemove)
 
 	// The globals are announced in reply to get_registry, so one roundtrip is
 	// enough to have heard about all of them.
@@ -152,6 +157,15 @@ func Open() (*Display, error) {
 		if !required.present {
 			d.ctx.Close()
 			return nil, fmt.Errorf("the compositor does not offer %s", required.name)
+		}
+	}
+	// Output globals discovered in the first roundtrip are bound by requests
+	// which follow that first sync request. A second roundtrip collects their
+	// initial geometry, mode and identity before the hello is built.
+	if len(d.outputs) != 0 {
+		if err := d.roundtrip(); err != nil {
+			d.ctx.Close()
+			return nil, fmt.Errorf("reading Wayland outputs: %w", err)
 		}
 	}
 	if d.decoration == nil {
@@ -252,6 +266,16 @@ func (d *Display) global(e client.RegistryGlobalEvent) {
 		d.seat = client.NewSeat(d.ctx)
 		d.seatBound = d.bind(e, d.seat, seatVersion)
 		d.seat.SetCapabilitiesHandler(d.seatCapabilities)
+	case "wl_output":
+		d.addOutput(e)
+	}
+}
+
+// globalRemove forgets a monitor which has been unplugged. It runs under mu.
+func (d *Display) globalRemove(e client.RegistryGlobalRemoveEvent) {
+	if output := d.outputs[e.Name]; output != nil {
+		d.ctx.Unregister(output.output)
+		delete(d.outputs, e.Name)
 	}
 }
 

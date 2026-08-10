@@ -246,8 +246,13 @@ func (d *decoder) dict(n int, terminated bool, depth int) (map[string]any, error
 			out[key] = v
 		case []byte:
 			out[string(key)] = v
+		case int64:
+			// Per-monitor capability dictionaries use numeric monitor indexes.
+			// Normalize them to strings so the rest of the protocol can retain
+			// its convenient map[string]any representation.
+			out[strconv.FormatInt(key, 10)] = v
 		default:
-			return nil, fmt.Errorf("rencodeplus: dict key has type %T, want string", k)
+			return nil, fmt.Errorf("rencodeplus: dict key has type %T, want string or integer", k)
 		}
 	}
 	return out, nil

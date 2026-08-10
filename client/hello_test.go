@@ -2,11 +2,20 @@ package client
 
 import (
 	"encoding/hex"
+	"reflect"
 	"testing"
 
 	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/rencodeplus"
+	"github.com/Xpra-org/go-xpra/ui"
 )
+
+type monitorHelloDisplay struct {
+	ui.Display
+	monitors []ui.Monitor
+}
+
+func (d *monitorHelloDisplay) Monitors() []ui.Monitor { return d.monitors }
 
 // The expected digests were produced by xpra's own xpra.net.digest.gendigest,
 // so this pins the exact HMAC operand order — which differs between the two
@@ -232,6 +241,56 @@ func TestBuildHelloClipboardCapability(t *testing.T) {
 		if !clipboard.Has(key) {
 			t.Errorf("clipboard.%s is missing", key)
 		}
+	}
+}
+
+func TestHelloIncludesPerMonitorCapabilities(t *testing.T) {
+	setBackwardsCompatible(t, false)
+	client, server, _ := outboundHarness(t)
+	client.display = &monitorHelloDisplay{monitors: []ui.Monitor{
+		{Geometry: ui.Rectangle{}}, // invalid outputs are not advertised
+		{
+			Name: "DP-1", Manufacturer: "Acme", Model: "Wide Panel",
+			SubpixelLayout: "horizontal-rgb",
+			Geometry:       ui.Rectangle{X: -1920, Y: 0, Width: 1920, Height: 1080},
+			WorkArea:       ui.Rectangle{X: -1920, Y: 24, Width: 1920, Height: 1056},
+			WidthMM:        510, HeightMM: 290, RefreshRate: 60000, ScaleFactor: 1,
+			Primary: true,
+		},
+	}}
+	if err := client.sendHello("", nil); err != nil {
+		t.Fatalf("sendHello: %v", err)
+	}
+	hello := receiveOutbound(t, server, "hello").Dict(1)
+	display := hello.Dict("display")
+	if display == nil {
+		t.Fatal("display subsystem capabilities are missing")
+	}
+	monitors := display.Dict("monitors")
+	if monitors == nil || len(monitors) != 1 {
+		t.Fatalf("monitors = %#v, want one valid monitor", monitors)
+	}
+	monitor := monitors.Dict("0")
+	if monitor == nil {
+		t.Fatal("monitor 0 is missing")
+	}
+	if got := monitor["geometry"]; !reflect.DeepEqual(got,
+		[]any{int64(-1920), int64(0), int64(1920), int64(1080)}) {
+		t.Errorf("geometry = %#v", got)
+	}
+	if got := monitor["workarea"]; !reflect.DeepEqual(got,
+		[]any{int64(-1920), int64(24), int64(1920), int64(1056)}) {
+		t.Errorf("workarea = %#v", got)
+	}
+	if monitor.Str("name") != "DP-1" || monitor.Str("manufacturer") != "Acme" ||
+		monitor.Str("model") != "Wide Panel" ||
+		monitor.Str("subpixel-layout") != "horizontal-rgb" {
+		t.Errorf("monitor identity = %#v", monitor)
+	}
+	if monitor.Int("width-mm") != 510 || monitor.Int("height-mm") != 290 ||
+		monitor.Int("refresh-rate") != 60000 || monitor.Int("scale-factor") != 1 ||
+		!monitor.Bool("primary") {
+		t.Errorf("monitor details = %#v", monitor)
 	}
 }
 
