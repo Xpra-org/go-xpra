@@ -6,7 +6,7 @@
 
 A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP, TLS,
 WebSocket, SSH or a Unix-domain socket and shows the forwarded windows on the local desktop — X11
-or Wayland on Linux, Win32 on Windows.
+or Wayland on Linux, Win32 on Windows, AppKit on macOS.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -125,14 +125,14 @@ Pass `--backend wayland` to use the compositor directly anyway.
   override-redirect popups
 - raw RGB, JPEG, PNG (including palette and grayscale PNG), and WebP pixels
 - pointer, keyboard and focus forwarding, with keys named the X11 way on every platform
-- bidirectional UTF-8 text clipboard synchronization on X11, native Wayland and Windows
+- bidirectional UTF-8 text clipboard synchronization on X11, native Wayland, Windows and macOS
 - server-provided PNG pointer cursors, including hotspot changes and default-cursor resets
-- server-provided per-window PNG icons on X11 and Windows, and on Wayland compositors supporting
-  `xdg-toplevel-icon-v1`
-- a Windows notification-area session icon with a native Exit menu
+- server-provided per-window PNG icons on X11 and Windows, on Wayland compositors supporting
+  `xdg-toplevel-icon-v1`, and as the Dock icon on macOS, which has no per-window equivalent
+- a Windows notification-area or macOS menu-bar session icon with a native Exit menu
 - native Wayland windows through `xdg-shell` and `wl_shm`, with menus as real `xdg_popup`s and
   window frames from `xdg-decoration`
-- forwarded application bells using the native X11 or Win32 sound
+- forwarded application bells using the native X11, Win32 or macOS sound
 - desktop notification logging
 - server lifecycle event logging
 - local window resize is reported back to the server, and the title bar's close button closes the
@@ -141,7 +141,7 @@ Pass `--backend wayland` to use the compositor directly anyway.
 ## What it does not do
 
 Everything else: h264 and the other encodings, rich clipboard formats, audio, native notification
-popups, forwarded system tray icons, and keymap upload. Linux and Windows only — no macOS.
+popups, forwarded system tray icons, and keymap upload.
 
 Clipboard support deliberately covers only text in the ordinary `CLIPBOARD` selection. Images,
 HTML, file lists, and X11's `PRIMARY` and `SECONDARY` selections are not synchronized. Text is
@@ -155,6 +155,15 @@ nothing to leave out.
 The Windows backend is newer and thinner than the X11 one. It names keys from the active keyboard
 layout, but only as far as printable ASCII: a key that produces anything else has no X11 keysym
 name here and is dropped rather than guessed at, so non-Latin layouts and dead keys do not type.
+
+The macOS backend talks to AppKit through [purego](https://github.com/ebitengine/purego)'s
+Objective-C runtime bridge rather than cgo, keeping this client's no-cgo, cross-compiles-from-
+anywhere property on all three platforms. It repaints a window's whole buffer on every damage
+rectangle rather than blitting just the changed area, a deliberate trade-off for the
+best-supported call shape that bridge offers (see `darwin/doc.go`). It has no per-window icon or
+title-bar concept to set, so a server-provided icon becomes the process's Dock icon instead, and
+it maps Option to X11's `Alt` and Command to `Super`, the same choice the Windows backend makes
+between its own Alt and Windows keys.
 
 The Wayland backend gives up what the protocol does not offer a client. The compositor decides
 where each window goes, so the positions the server sends are kept as bookkeeping and answered
@@ -178,13 +187,16 @@ compositor hands over its whole keymap, so every layout names its keys correctly
 | `x11` | the X connection, forwarded windows, and RGB painting — Linux |
 | `wayland` | the compositor connection, `xdg-shell` windows, and shared-memory painting — Linux |
 | `win32` | the window thread, forwarded windows, and RGB painting — Windows |
+| `darwin` | the AppKit connection, forwarded windows, and CALayer painting — macOS |
 | `cmd/go-xpra` | the command line entry point |
 
 Four goroutines: one reads packets from the connection stream, one writes them, one belongs to the local
 desktop — reading X events, dispatching Wayland ones, or owning the Windows windows and their
 message loop — and the main one owns all client state and is the only writer to either. The two
 backends that cannot let their desktop goroutine block on a slow client put a coalescing queue in
-between, which adds a fifth.
+between, which adds a fifth. macOS needs a further inversion on top of that: AppKit's run loop has
+to own the real OS main thread, so `cmd/go-xpra`'s own entry point runs inside it rather than the
+other way around, through `darwin.RunMain`.
 
 ## Notes on the design
 

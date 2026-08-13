@@ -15,3 +15,7 @@ func openDisplay() (ui.Display, error) {
 	}
 	return display, nil
 }
+
+// runMain runs fn directly: only darwin needs the indirection of running the
+// display backend's own run loop on a specific thread first.
+func runMain(fn func() error) error { return fn() }

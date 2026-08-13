@@ -84,19 +84,24 @@ func main() {
 		fmt.Printf("go-xpra %s\n", version)
 		return
 	}
-	ssl := sslOptions{caCert: *sslCACert, insecure: *sslInsecure}
-	if noArguments {
-		if err := runConnectionDialog(*verbose, ssl); err != nil {
-			log.Printf("error: %v", err)
-			os.Exit(1)
-		}
-		return
-	}
-	if flag.NArg() != 1 {
+	if !noArguments && flag.NArg() != 1 {
 		usage()
 		os.Exit(2)
 	}
-	if err := run(flag.Arg(0), *verbose, ssl); err != nil {
+
+	ssl := sslOptions{caCert: *sslCACert, insecure: *sslInsecure}
+	// runMain is a no-op indirection on Linux and Windows. On darwin it hands
+	// control to AppKit's run loop, which must own the real OS main thread —
+	// see display_darwin.go and darwin.RunMain — so everything that opens a
+	// display and blocks on the connection has to run inside it rather than
+	// directly here.
+	err := runMain(func() error {
+		if noArguments {
+			return runConnectionDialog(*verbose, ssl)
+		}
+		return run(flag.Arg(0), *verbose, ssl)
+	})
+	if err != nil {
 		log.Printf("error: %v", err)
 		os.Exit(1)
 	}
