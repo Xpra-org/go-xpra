@@ -824,7 +824,11 @@ func (c *Client) handleUIEvent(event ui.Event) {
 		c.handleCloseRequest(e)
 	case ui.ExitRequest:
 		log.Printf("session exit requested")
-		c.send("disconnect", "client exit")
+		packetType := "connection-close"
+		if protocol.BackwardsCompatible {
+			packetType = "disconnect"
+		}
+		c.send(packetType, "client exit")
 		c.stop(nil)
 	case ui.Motion:
 		c.handleMotion(e)

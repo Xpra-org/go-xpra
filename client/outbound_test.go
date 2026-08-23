@@ -170,25 +170,38 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 }
 
 func TestExitRequestDisconnectsAndStopsCleanly(t *testing.T) {
-	client, server, _ := outboundHarness(t)
-	events := make(chan ui.Event, 1)
-	client.display = &exitRequestDisplay{events: events}
-	runResult := make(chan error, 1)
-	go func() { runResult <- client.Run() }()
-
-	receiveOutbound(t, server, "hello")
-	events <- ui.ExitRequest{}
-	packet := receiveOutbound(t, server, "disconnect")
-	if len(packet) != 2 || packet.Str(1) != "client exit" {
-		t.Errorf("disconnect packet = %v, want [disconnect client exit]", packet)
+	tests := []struct {
+		name                string
+		backwardsCompatible bool
+		packetType          string
+	}{
+		{"compatible", true, "disconnect"},
+		{"modern", false, "connection-close"},
 	}
-	select {
-	case err := <-runResult:
-		if err != nil {
-			t.Errorf("Run returned %v, want a clean exit", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Run did not stop after ExitRequest")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setBackwardsCompatible(t, test.backwardsCompatible)
+			client, server, _ := outboundHarness(t)
+			events := make(chan ui.Event, 1)
+			client.display = &exitRequestDisplay{events: events}
+			runResult := make(chan error, 1)
+			go func() { runResult <- client.Run() }()
+
+			receiveOutbound(t, server, "hello")
+			events <- ui.ExitRequest{}
+			packet := receiveOutbound(t, server, test.packetType)
+			if len(packet) != 2 || packet.Str(1) != "client exit" {
+				t.Errorf("close packet = %v, want [%s client exit]", packet, test.packetType)
+			}
+			select {
+			case err := <-runResult:
+				if err != nil {
+					t.Errorf("Run returned %v, want a clean exit", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("Run did not stop after ExitRequest")
+			}
+		})
 	}
 }
 
