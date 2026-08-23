@@ -45,7 +45,7 @@ func buildHello(username string, clipboard bool) rencodeplus.Dict {
 		// The oldest peer we can talk to. The server refuses the connection if
 		// its own version is below this (xpra/server/core.py, via
 		// protocol_compat_check); servers too old to know the key ignore it.
-		{Key: "protocol", Value: protocol.MinProtocolVersion[:]},
+		{Key: "protocol-version", Value: protocol.MinProtocolVersion[:]},
 
 		// Packet encoder negotiation. Without a match the server disconnects
 		// with PROTOCOL_ERROR (xpra/server/core.py:1567).

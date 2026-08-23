@@ -31,7 +31,7 @@ func envBool(name string, fallback bool) bool {
 }
 
 // MinProtocolVersion is the oldest peer we are prepared to talk to, advertised
-// as the hello "protocol" capability and run through the remote's
+// as the hello "protocol-version" capability and run through the remote's
 // protocol_compat_check (xpra/util/version.py:120) to decide whether it can
 // keep talking to us.
 //
