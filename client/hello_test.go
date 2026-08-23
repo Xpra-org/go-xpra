@@ -387,3 +387,24 @@ func TestPingsStopWhenAServerReHelloDropsTheCapability(t *testing.T) {
 		t.Error("pings kept running after the capability went away")
 	}
 }
+
+// The advertised protocol floor is what a modern server runs through
+// protocol_compat_check, and it must not soften in backwards compatible mode:
+// the legacy spellings are additive, the packet shapes we understand are not.
+func TestBuildHelloMinProtocolVersion(t *testing.T) {
+	for _, compatible := range []bool{true, false} {
+		setBackwardsCompatible(t, compatible)
+		encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false)})
+		if err != nil {
+			t.Fatalf("encoding hello: %v", err)
+		}
+		decoded, err := rencodeplus.Decode(encoded)
+		if err != nil {
+			t.Fatalf("decoding hello: %v", err)
+		}
+		got := protocol.Packet(decoded.([]any)).Dict(1)["protocol"]
+		if want := []any{int64(6), int64(5)}; !reflect.DeepEqual(got, want) {
+			t.Errorf("backwards compatible %v: protocol = %#v, want %#v", compatible, got, want)
+		}
+	}
+}
