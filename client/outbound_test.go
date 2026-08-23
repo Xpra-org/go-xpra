@@ -169,6 +169,28 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 	receiveOutbound(t, server, "ping_echo")
 }
 
+func TestPingEchoUsesTheNegotiatedPacketName(t *testing.T) {
+	tests := []struct {
+		name                string
+		backwardsCompatible bool
+		packetType          string
+	}{
+		{"compatible", true, "ping_echo"},
+		{"modern", false, "ping-echo"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setBackwardsCompatible(t, test.backwardsCompatible)
+			client, server, _ := outboundHarness(t)
+			client.handlePing(protocol.Packet{"ping", int64(123), int64(0), "session"})
+			echo := receiveOutbound(t, server, test.packetType)
+			if echo.Int(1) != 123 || echo.Str(6) != "session" {
+				t.Errorf("%s = %v", test.packetType, echo)
+			}
+		})
+	}
+}
+
 func TestExitRequestDisconnectsAndStopsCleanly(t *testing.T) {
 	tests := []struct {
 		name                string

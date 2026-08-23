@@ -155,6 +155,7 @@ var canonicalNames = map[string]string{
 	"bell":                        "window-bell",
 	"notify_show":                 "notification-show",
 	"notify_close":                "notification-close",
+	"ping_echo":                   "ping-echo",
 }
 
 // Canonical returns the modern name for a packet type. Legacy names are only

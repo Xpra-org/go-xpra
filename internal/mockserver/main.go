@@ -84,6 +84,9 @@ func serve(conn *protocol.Conn) {
 				{Key: "encoding", Value: rencodeplus.Dict{
 					{Key: "core", Value: []string{"rgb24", "rgb32"}},
 				}},
+				// A real server advertises its own ping interval in seconds,
+				// and a client only pings a server that asks to be pinged.
+				{Key: "ping", Value: 5},
 			})
 			send(conn, "startup-complete")
 			send(conn, "window-create", windowID, winX, winY, winWidth, winHeight,
@@ -111,7 +114,7 @@ func serve(conn *protocol.Conn) {
 			send(conn, "window-destroy", windowID)
 			send(conn, "connection-close", "test over")
 
-		case "ping", "ping_echo":
+		case "ping", "ping_echo", "ping-echo":
 			// Keepalive noise, and not what anyone is watching for.
 
 		default:

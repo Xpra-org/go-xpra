@@ -16,9 +16,9 @@ import (
 	"github.com/Xpra-org/go-xpra/ui"
 )
 
-// pingInterval is how often we ping the server. The server pings us
-// independently and disconnects on CLIENT_PING_TIMEOUT if we stop echoing,
-// which handlePing takes care of.
+// pingInterval is how often we ping the server, once its hello says it wants
+// pings at all. The server pings us independently and disconnects on
+// CLIENT_PING_TIMEOUT if we stop echoing, which handlePing takes care of.
 const pingInterval = 5 * time.Second
 
 // exitFlushTimeout bounds how long the exit path waits for queued packets to
@@ -56,6 +56,9 @@ type Client struct {
 	clipboardGeneration  uint64
 	nextClipboardRequest int64
 	clipboardRequests    map[int64]clipboardRequest
+
+	ping      *time.Ticker
+	pingTicks <-chan time.Time // ping.C, or nil while pings are off
 
 	serverVersion  string
 	challengeSeen  bool
@@ -111,8 +114,7 @@ func (c *Client) Run() error {
 		return fmt.Errorf("sending hello: %w", err)
 	}
 
-	ping := time.NewTicker(pingInterval)
-	defer ping.Stop()
+	defer c.stopPings()
 
 	for {
 		select {
@@ -131,7 +133,7 @@ func (c *Client) Run() error {
 			}
 			c.handleUIEvent(event)
 
-		case <-ping.C:
+		case <-c.pingTicks:
 			c.send("ping", time.Now().UnixMilli())
 
 		case reason := <-c.disconnect:
@@ -357,7 +359,7 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 
 	case "ping":
 		c.handlePing(packet)
-	case "ping_echo":
+	case "ping-echo":
 		// Round-trip timing, which this client does not track.
 
 	case "disconnect":
@@ -512,6 +514,38 @@ func (c *Client) handleHello(packet protocol.Packet) {
 	c.serverVersion = caps.Str("version")
 	log.Printf("connected to xpra server version %s", c.serverVersion)
 	c.configureClipboard(caps.Dict("clipboard"))
+	c.configurePings(caps)
+}
+
+// configurePings starts or stops the ping timer according to the server's
+// hello. The capability is the server's own ping interval in seconds, so a
+// zero there means pings are switched off, and an absent one means the server
+// has no ping subsystem at all: a server started with --minimal drops the key
+// and logs a warning for every ping packet it then has no handler for. Xpra's
+// own client keeps pinging an unadvertised server in compatibility mode
+// (xpra/client/subsystem/ping.py, in parse_server_capabilities); we do not,
+// because the server pings us independently and handlePing answers those, so
+// nothing is lost by staying quiet until we are asked.
+func (c *Client) configurePings(caps protocol.Dict) {
+	if !caps.Bool("ping") {
+		c.debugf("the server does not want pings")
+		c.stopPings()
+		return
+	}
+	if c.ping == nil {
+		c.ping = time.NewTicker(pingInterval)
+		c.pingTicks = c.ping.C
+	}
+}
+
+// stopPings silences the ping timer. Selecting on the nil channel it leaves
+// behind simply never fires, so the run loop needs no special case.
+func (c *Client) stopPings() {
+	if c.ping != nil {
+		c.ping.Stop()
+		c.ping = nil
+		c.pingTicks = nil
+	}
 }
 
 func (c *Client) handleChallenge(packet protocol.Packet) {
@@ -557,13 +591,20 @@ func (c *Client) challengePassword(description string) (string, error) {
 }
 
 func (c *Client) handlePing(packet protocol.Packet) {
-	// ["ping_echo", echotime, load1, load5, load15, latency_ms, session_id].
-	// The load averages and latency are informational; -1 means "unknown".
+	// [echo, echotime, load1, load5, load15, latency_ms, session_id], where
+	// the echo packet is named "ping-echo" by a modern server and "ping_echo"
+	// by a legacy one (xpra/server/subsystem/ping.py, which only registers the
+	// underscored alias in compatibility mode). The load averages and latency
+	// are informational; -1 means "unknown".
+	packetType := "ping-echo"
+	if protocol.BackwardsCompatible {
+		packetType = "ping_echo"
+	}
 	sessionID := ""
 	if len(packet) >= 4 {
 		sessionID = packet.Str(3)
 	}
-	c.send("ping_echo", packet.Int(1), 0, 0, 0, -1, sessionID)
+	c.send(packetType, packet.Int(1), 0, 0, 0, -1, sessionID)
 }
 
 // packetWindowSize reads the width and height shared by the window-create and

@@ -343,3 +343,47 @@ func TestMachineUUIDIsStable(t *testing.T) {
 		t.Errorf("machineUUID is %d characters, want 32 hex characters", len(machineUUID()))
 	}
 }
+
+func TestPingsOnlyStartWhenTheServerAdvertisesThem(t *testing.T) {
+	tests := []struct {
+		name                string
+		backwardsCompatible bool
+		caps                map[string]any
+		want                bool
+	}{
+		{"advertised interval", false, map[string]any{"ping": int64(5)}, true},
+		{"advertised flag", false, map[string]any{"ping": true}, true},
+		{"disabled", false, map[string]any{"ping": int64(0)}, false},
+		// A --minimal server drops the key altogether and warns about every
+		// ping it has no handler for, in either compatibility mode.
+		{"absent", false, map[string]any{}, false},
+		{"absent on a legacy server", true, map[string]any{}, false},
+		{"advertised by a legacy server", true, map[string]any{"ping": int64(5)}, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setBackwardsCompatible(t, test.backwardsCompatible)
+			client, _, _ := outboundHarness(t)
+			client.configurePings(protocol.Dict(test.caps))
+			defer client.stopPings()
+			if got := client.pingTicks != nil; got != test.want {
+				t.Errorf("pings started = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestPingsStopWhenAServerReHelloDropsTheCapability(t *testing.T) {
+	setBackwardsCompatible(t, false)
+	client, _, _ := outboundHarness(t)
+	client.configurePings(protocol.Dict{"ping": true})
+	ticker := client.ping
+	client.configurePings(protocol.Dict{"ping": true})
+	if client.ping != ticker {
+		t.Error("a second hello restarted the ping timer")
+	}
+	client.configurePings(protocol.Dict{})
+	if client.ping != nil || client.pingTicks != nil {
+		t.Error("pings kept running after the capability went away")
+	}
+}
