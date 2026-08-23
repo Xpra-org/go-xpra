@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/pierrec/lz4/v4"
 
@@ -18,6 +20,14 @@ import (
 // can be produced faster than a stalled socket drains them; a bounded queue
 // applies back-pressure to the sender instead of growing without limit.
 const writeQueue = 256
+
+// outbound is one item in the write queue: a frame to write, or — when data is
+// nil — a flush marker whose done channel the write loop closes once every
+// frame queued ahead of it has reached the socket.
+type outbound struct {
+	data []byte
+	done chan struct{}
+}
 
 // Xpra rejects a fourth pending raw chunk. Chunks are top-level binary packet
 // elements sent before the encoded main packet that names their indexes.
@@ -92,7 +102,9 @@ func (s *rawChunkState) apply(packet []any, mainSize int) error {
 type Conn struct {
 	conn    io.ReadWriteCloser
 	packets chan Packet
-	writes  chan []byte
+	writes  chan outbound
+	closing chan struct{} // closed by Close, which stops the write loop
+	written chan struct{} // closed when the write loop has stopped
 
 	mu     sync.Mutex
 	err    error
@@ -136,14 +148,21 @@ func DialTLS(address string, config *tls.Config) (*Conn, error) {
 // The framing is the same in both directions, so this also serves the accepted
 // side of a connection, which is how the mock server stands in for a real one.
 func New(stream io.ReadWriteCloser) *Conn {
-	c := &Conn{
-		conn:    stream,
-		packets: make(chan Packet, 64),
-		writes:  make(chan []byte, writeQueue),
-	}
+	c := newConn(stream)
 	go c.readLoop()
 	go c.writeLoop()
 	return c
+}
+
+// newConn builds a connection without starting its loops.
+func newConn(stream io.ReadWriteCloser) *Conn {
+	return &Conn{
+		conn:    stream,
+		packets: make(chan Packet, 64),
+		writes:  make(chan outbound, writeQueue),
+		closing: make(chan struct{}),
+		written: make(chan struct{}),
+	}
 }
 
 // Packets returns the channel of incoming packets. It is closed when the
@@ -177,7 +196,7 @@ func (c *Conn) Send(packet ...any) error {
 		return nil
 	}
 	select {
-	case c.writes <- frame:
+	case c.writes <- outbound{data: frame}:
 	default:
 		// The queue is full, which means the peer has stopped reading. Drop
 		// rather than block: the caller is the UI goroutine, and the
@@ -196,7 +215,53 @@ func packetName(packet []any) string {
 	return "?"
 }
 
+// Flush waits for the packets queued so far to reach the socket, so that a
+// last packet — the disconnect we send on exit, above all — is not lost to the
+// Close that follows it. It gives up after timeout, and returns as soon as the
+// connection ends, since a queue that will never drain is not worth waiting
+// for. The error it returns is informational: the caller is on its way out.
+func (c *Conn) Flush(timeout time.Duration) error {
+	c.mu.Lock()
+	closed := c.closed
+	c.mu.Unlock()
+	if closed {
+		return c.flushErr()
+	}
+
+	done := make(chan struct{})
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case c.writes <- outbound{done: done}:
+	case <-c.written:
+		return c.flushErr()
+	case <-timer.C:
+		return fmt.Errorf("timed out after %s queueing the flush marker", timeout)
+	}
+	select {
+	case <-done:
+		return nil
+	case <-c.written:
+		return c.flushErr()
+	case <-timer.C:
+		return fmt.Errorf("timed out after %s waiting for queued packets to be sent", timeout)
+	}
+}
+
+// flushErr describes a connection that stopped writing before the flush
+// completed, naming the underlying failure when there was one.
+func (c *Conn) flushErr() error {
+	if err := c.Err(); err != nil {
+		return fmt.Errorf("connection ended before the queued packets were sent: %w", err)
+	}
+	return errors.New("connection closed before the queued packets were sent")
+}
+
 // Close shuts the connection down. It is safe to call more than once.
+//
+// Anything still queued is abandoned; call Flush first to give it a chance to
+// go out.
 func (c *Conn) Close() error {
 	c.mu.Lock()
 	if c.closed {
@@ -205,6 +270,7 @@ func (c *Conn) Close() error {
 	}
 	c.closed = true
 	c.mu.Unlock()
+	close(c.closing)
 	return c.conn.Close()
 }
 
@@ -280,9 +346,20 @@ func (c *Conn) readLoop() {
 }
 
 func (c *Conn) writeLoop() {
-	for frame := range c.writes {
-		if _, err := c.conn.Write(frame); err != nil {
-			c.fail(fmt.Errorf("writing packet: %w", err))
+	defer close(c.written)
+
+	for {
+		select {
+		case item := <-c.writes:
+			if item.data == nil {
+				close(item.done)
+				continue
+			}
+			if _, err := c.conn.Write(item.data); err != nil {
+				c.fail(fmt.Errorf("writing packet: %w", err))
+				return
+			}
+		case <-c.closing:
 			return
 		}
 	}

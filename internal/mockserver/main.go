@@ -19,6 +19,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"time"
 
 	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/rencodeplus"
@@ -33,6 +34,10 @@ const (
 	winWidth  = 400
 	winHeight = 300
 )
+
+// flushTimeout bounds the wait for queued packets to reach the socket before
+// the connection is closed under them.
+const flushTimeout = 2 * time.Second
 
 func main() {
 	log.SetFlags(log.Ltime)
@@ -62,6 +67,13 @@ func main() {
 // serve runs one session, returning when the client disconnects.
 func serve(conn *protocol.Conn) {
 	defer conn.Close()
+	// Close abandons the write queue, which on this path still holds the
+	// connection-close telling the client why the session ended.
+	defer func() {
+		if err := conn.Flush(flushTimeout); err != nil {
+			log.Printf("flushing outbound packets: %v", err)
+		}
+	}()
 
 	for packet := range conn.Packets() {
 		switch packet.Type() {

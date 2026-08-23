@@ -21,6 +21,11 @@ import (
 // which handlePing takes care of.
 const pingInterval = 5 * time.Second
 
+// exitFlushTimeout bounds how long the exit path waits for queued packets to
+// reach the socket. Long enough for the disconnect to get out on a working
+// connection, short enough not to hang the exit on a dead one.
+const exitFlushTimeout = 2 * time.Second
+
 // Decode-time sentinels for the draw acknowledgement (xpra/constants.py:127).
 // A positive value is the real paint time in microseconds, and zero means the
 // draw was skipped — so a successful paint must never report zero.
@@ -97,6 +102,9 @@ func (c *Client) SetPasswordPrompt(prompt PasswordPrompt) {
 // the connection ends. It returns nil for a clean server-initiated disconnect.
 func (c *Client) Run() error {
 	defer c.closeMmap()
+	// The caller closes the connection as soon as this returns, which would
+	// drop whatever is still queued — the disconnect we send on exit included.
+	defer c.flushOutbound()
 	if err := c.sendHello("", nil); err != nil {
 		return fmt.Errorf("sending hello: %w", err)
 	}
@@ -148,6 +156,15 @@ func (c *Client) stop(err error) {
 func (c *Client) send(packet ...any) {
 	if err := c.conn.Send(packet...); err != nil {
 		log.Printf("send: %v", err)
+	}
+}
+
+// flushOutbound gives the queued packets a chance to reach the server. A
+// failure here only means the connection was already gone, which is not worth
+// reporting on an exit path beyond the verbose log.
+func (c *Client) flushOutbound() {
+	if err := c.conn.Flush(exitFlushTimeout); err != nil {
+		c.debugf("flushing outbound packets: %v", err)
 	}
 }
 

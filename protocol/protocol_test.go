@@ -119,11 +119,7 @@ func frame(t *testing.T, packet []any, compress bool) []byte {
 func readerHarness(t *testing.T) (*Conn, net.Conn) {
 	t.Helper()
 	client, server := net.Pipe()
-	c := &Conn{
-		conn:    client,
-		packets: make(chan Packet, 8),
-		writes:  make(chan []byte, 8),
-	}
+	c := newConn(client)
 	go c.readLoop()
 	go c.writeLoop()
 	t.Cleanup(func() {
@@ -388,6 +384,64 @@ func TestSendWritesOneFrame(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for the write")
+	}
+}
+
+// Flush is what keeps the disconnect packet alive: the caller sends it and
+// closes immediately afterwards, so the write must be complete first.
+func TestFlushWaitsForTheQueuedPacket(t *testing.T) {
+	c, server := readerHarness(t)
+
+	if err := c.Send("connection-close", "client exit"); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	flushed := make(chan error, 1)
+	go func() { flushed <- c.Flush(2 * time.Second) }()
+
+	// net.Pipe is unbuffered, so the write cannot complete until the peer
+	// reads it, and neither can the flush.
+	select {
+	case err := <-flushed:
+		t.Fatalf("Flush returned %v before the peer read anything", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	buf := make([]byte, 128)
+	n, err := server.Read(buf)
+	if err != nil {
+		t.Fatalf("reading the packet: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("read an empty packet")
+	}
+	select {
+	case err := <-flushed:
+		if err != nil {
+			t.Errorf("Flush: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for Flush")
+	}
+}
+
+func TestFlushTimesOutOnAStalledPeer(t *testing.T) {
+	c, _ := readerHarness(t)
+
+	if err := c.Send("ping", 1234); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	// Nothing reads from the pipe, so the write never completes.
+	if err := c.Flush(50 * time.Millisecond); err == nil {
+		t.Error("Flush returned nil on a peer that read nothing")
+	}
+}
+
+func TestFlushReportsAClosedConnection(t *testing.T) {
+	c, _ := readerHarness(t)
+	c.Close()
+
+	if err := c.Flush(2 * time.Second); err == nil {
+		t.Error("Flush returned nil on a closed connection")
 	}
 }
 
