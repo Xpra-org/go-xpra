@@ -205,6 +205,51 @@ func TestExitRequestDisconnectsAndStopsCleanly(t *testing.T) {
 	}
 }
 
+// Disconnect is what the interrupt handler calls: the packet has to be sent by
+// the run loop, from whatever goroutine asked for the shutdown.
+func TestDisconnectSendsTheReasonAndStopsCleanly(t *testing.T) {
+	tests := []struct {
+		name                string
+		backwardsCompatible bool
+		packetType          string
+	}{
+		{"compatible", true, "disconnect"},
+		{"modern", false, "connection-close"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setBackwardsCompatible(t, test.backwardsCompatible)
+			client, server, _ := outboundHarness(t)
+			client.display = &exitRequestDisplay{events: make(chan ui.Event)}
+			runResult := make(chan error, 1)
+			go func() { runResult <- client.Run() }()
+
+			receiveOutbound(t, server, "hello")
+			client.Disconnect("client interrupted")
+			packet := receiveOutbound(t, server, test.packetType)
+			if len(packet) != 2 || packet.Str(1) != "client interrupted" {
+				t.Errorf("close packet = %v, want [%s client interrupted]", packet, test.packetType)
+			}
+			select {
+			case err := <-runResult:
+				if err != nil {
+					t.Errorf("Run returned %v, want a clean exit", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("Run did not stop after Disconnect")
+			}
+		})
+	}
+}
+
+// Disconnect must be harmless when there is no run loop left to hear it: the
+// interrupt handler cannot know whether Run has already returned.
+func TestDisconnectAfterRunIsANoOp(t *testing.T) {
+	client, _, _ := outboundHarness(t)
+	client.Disconnect("client interrupted")
+	client.Disconnect("client interrupted")
+}
+
 type exitRequestDisplay struct {
 	ui.Display
 	events <-chan ui.Event

@@ -65,6 +65,7 @@ type Client struct {
 	mmap           *mmapArea
 	exitErr        error
 	quit           chan struct{}
+	disconnect     chan string
 }
 
 // PasswordPrompt obtains a password when neither the connection URL nor
@@ -84,6 +85,7 @@ func New(conn *protocol.Conn, display ui.Display, verbose bool, username, passwo
 		byLocal:           map[ui.WindowID]int64{},
 		clipboardRequests: map[int64]clipboardRequest{},
 		quit:              make(chan struct{}),
+		disconnect:        make(chan string, 1),
 	}
 	if provider, ok := display.(ui.ClipboardProvider); ok {
 		c.clipboard = provider.Clipboard()
@@ -132,10 +134,38 @@ func (c *Client) Run() error {
 		case <-ping.C:
 			c.send("ping", time.Now().UnixMilli())
 
+		case reason := <-c.disconnect:
+			log.Printf("disconnecting: %s", reason)
+			c.sendDisconnect(reason)
+			c.stop(nil)
+			return c.exitErr
+
 		case <-c.quit:
 			return c.exitErr
 		}
 	}
+}
+
+// Disconnect asks the run loop to say goodbye to the server and return. It is
+// safe to call from any goroutine — a signal handler above all — because the
+// packet is sent by the run loop, which owns the connection state; the caller
+// only leaves the reason behind. Once one is pending, or once Run has
+// returned, further calls do nothing.
+func (c *Client) Disconnect(reason string) {
+	select {
+	case c.disconnect <- reason:
+	default:
+	}
+}
+
+// sendDisconnect tells the server why the session is ending, naming the packet
+// the negotiated protocol expects.
+func (c *Client) sendDisconnect(reason string) {
+	packetType := "connection-close"
+	if protocol.BackwardsCompatible {
+		packetType = "disconnect"
+	}
+	c.send(packetType, reason)
 }
 
 // stop ends the run loop, reporting err (nil for a clean exit).
@@ -841,11 +871,7 @@ func (c *Client) handleUIEvent(event ui.Event) {
 		c.handleCloseRequest(e)
 	case ui.ExitRequest:
 		log.Printf("session exit requested")
-		packetType := "connection-close"
-		if protocol.BackwardsCompatible {
-			packetType = "disconnect"
-		}
-		c.send(packetType, "client exit")
+		c.sendDisconnect("client exit")
 		c.stop(nil)
 	case ui.Motion:
 		c.handleMotion(e)

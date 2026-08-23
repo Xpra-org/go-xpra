@@ -137,6 +137,8 @@ Pass `--backend wayland` to use the compositor directly anyway.
 - server lifecycle event logging
 - local window resize is reported back to the server, and the title bar's close button closes the
   remote application
+- graceful shutdown on `Ctrl-C`, `SIGTERM` or `SIGHUP`: the client tells the server why it is
+  leaving and waits for that packet to go out before closing the connection
 
 ## What it does not do
 

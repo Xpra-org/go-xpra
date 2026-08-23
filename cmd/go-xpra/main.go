@@ -316,6 +316,16 @@ func connect(target connectionURL, verbose bool, ssl sslOptions, tlsConfig *tls.
 	xpraClient.SetPasswordPrompt(func(description string) (string, error) {
 		return promptPassword(promptUsername, target.address, description)
 	})
+
+	// Ctrl-C ends the session the same way the Exit menu does: the run loop
+	// tells the server why we are leaving, flushes it, and unwinds through the
+	// deferred display and connection cleanup above.
+	stopSignals := onInterrupt(func(caught os.Signal) {
+		log.Printf("caught %s", caught)
+		xpraClient.Disconnect("client interrupted")
+	})
+	defer stopSignals()
+
 	return xpraClient.Run()
 }
 
