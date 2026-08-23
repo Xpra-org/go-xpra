@@ -58,7 +58,13 @@ func buildHello(username string, clipboard bool) rencodeplus.Dict {
 		{Key: "compressors", Value: []string{"lz4"}},
 		{Key: "compression_level", Value: 1},
 
-		{Key: "windows", Value: true},
+		// Window forwarding. Modern servers read this from the "window"
+		// namespace and only fall back to the plural "windows" flag in
+		// compatibility mode (xpra/server/common.py:21, wants_windows).
+		{Key: "window", Value: rencodeplus.Dict{
+			{Key: "enabled", Value: true},
+		}},
+
 		{Key: "keyboard", Value: true},
 		{Key: "pointer", Value: rencodeplus.Dict{
 			{Key: "double_click", Value: rencodeplus.Dict{}},
@@ -144,6 +150,7 @@ func buildHello(username string, clipboard bool) rencodeplus.Dict {
 		// Legacy capability spellings are only advertised when their matching
 		// packet types are accepted.
 		caps.Set("rencodeplus", true)
+		caps.Set("windows", true)
 		caps.Set("mouse", true)
 		caps.Set("cursors", true)
 		caps.Set("notifications", rencodeplus.Dict{

@@ -138,6 +138,12 @@ func TestBuildHello(t *testing.T) {
 	if !got.Bool("cursors") {
 		t.Error("the legacy cursors capability must be enabled")
 	}
+	if window := got.Dict("window"); window == nil || !window.Bool("enabled") {
+		t.Error("window.enabled must be advertised for window forwarding")
+	}
+	if !got.Bool("windows") {
+		t.Error("the legacy windows capability must be enabled")
+	}
 	if !got.Bool("notification") {
 		t.Error("the modern notification capability must be enabled")
 	}
@@ -214,7 +220,10 @@ func TestBuildHelloWithoutCompatibility(t *testing.T) {
 	if cursor.Bool("backwards-compatible") {
 		t.Error("cursor backwards-compatible capability is enabled")
 	}
-	for _, key := range []string{"rencodeplus", "mouse", "cursors", "notifications"} {
+	if window := got.Dict("window"); window == nil || !window.Bool("enabled") {
+		t.Error("window.enabled must be advertised for window forwarding")
+	}
+	for _, key := range []string{"rencodeplus", "windows", "mouse", "cursors", "notifications"} {
 		if got.Has(key) {
 			t.Errorf("legacy %q capability is advertised", key)
 		}
