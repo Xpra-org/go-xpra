@@ -39,6 +39,15 @@ const (
 // the connection is closed under them.
 const flushTimeout = 2 * time.Second
 
+// legacyNames maps what a backwards-compatible xpra client sends — the
+// default in 6.5.x, see xpra/net/packet_type.py — to the modern names that
+// serve handles. protocol.Canonical only covers the server-to-client ones.
+var legacyNames = map[string]string{
+	"map-window":      "window-map",
+	"close-window":    "window-close",
+	"damage-sequence": "window-draw-ack",
+}
+
 func main() {
 	log.SetFlags(log.Ltime)
 	listen := flag.String("listen", "127.0.0.1:14500", "address to listen on")
@@ -76,7 +85,11 @@ func serve(conn *protocol.Conn) {
 	}()
 
 	for packet := range conn.Packets() {
-		switch packet.Type() {
+		name := packet.Type()
+		if modern, ok := legacyNames[name]; ok {
+			name = modern
+		}
+		switch name {
 		case "hello":
 			log.Printf("<- hello")
 			send(conn, "hello", rencodeplus.Dict{
@@ -106,7 +119,8 @@ func serve(conn *protocol.Conn) {
 			// The client must never report a decode time of zero: xpra reads
 			// that as a failed paint, so it is worth seeing in the log.
 			sequenceIndex, widIndex, widthIndex, heightIndex := 4, 1, 2, 3
-			if protocol.BackwardsCompatible {
+			// damage-sequence only ever comes in the 6.5.x shape.
+			if protocol.BackwardsCompatible || packet.Type() == "damage-sequence" {
 				sequenceIndex, widIndex, widthIndex, heightIndex = 1, 2, 3, 4
 			}
 			log.Printf("<- window-draw-ack %d wid=%d %dx%d decode=%dus %q",
