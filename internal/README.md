@@ -12,6 +12,9 @@ go run ./internal/mockserver &
 go run ./cmd/go-xpra tcp://127.0.0.1:14500/
 ```
 
+An xpra 6.5.x client works against it too (`xpra attach tcp://127.0.0.1:14500/`), which is a
+quick way to tell a bug in the server from one in this client.
+
 It listens on `127.0.0.1:14500` unless `-listen` says otherwise, serves one client at a time, and
 keeps running afterwards, so the client can be restarted against it as often as you like.
 
