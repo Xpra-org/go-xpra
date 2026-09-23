@@ -81,6 +81,9 @@ func serve(conn *protocol.Conn) {
 			log.Printf("<- hello")
 			send(conn, "hello", rencodeplus.Dict{
 				{Key: "version", Value: "6.6-mock"},
+				// xpra clients refuse a server that names no packet encoder
+				// they share, and rencodeplus is the only one spoken here.
+				{Key: "encoders", Value: []string{"rencodeplus"}},
 				{Key: "encoding", Value: rencodeplus.Dict{
 					{Key: "core", Value: []string{"rgb24", "rgb32"}},
 				}},
