@@ -84,6 +84,8 @@ func serve(conn *protocol.Conn) {
 				// xpra clients refuse a server that names no packet encoder
 				// they share, and rencodeplus is the only one spoken here.
 				{Key: "encoders", Value: []string{"rencodeplus"}},
+				// xpra 6.5 clients fail on a hello without this, even empty.
+				{Key: "file", Value: rencodeplus.Dict{}},
 				{Key: "encoding", Value: rencodeplus.Dict{
 					{Key: "core", Value: []string{"rgb24", "rgb32"}},
 				}},
