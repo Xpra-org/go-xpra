@@ -60,8 +60,34 @@ go test ./...
 %{_mandir}/man1/%{name}.1*
 
 %changelog
-* Sat Aug 01 2026 Antoine Martin <antoine@xpra.org> 0.2.3-1
-- TODO
+* Thu Sep 24 2026 Antoine Martin <antoine@xpra.org> 0.2.3-1
+- Platforms, build and packaging:
+   fix the Debian golang installation
+   add macOS support
+   add the native macOS port
+   add CycloneDX SBOMs to the release builds
+- Features:
+   add mmap screen update support
+   add bidirectional UTF-8 text clipboard synchronization on X11, Wayland and Windows
+   add a Windows notification-area session icon with an Exit menu
+   avoid crashes when optional clipboard initialization fails
+   expose the desktop size in hello capabilities
+   expose per-monitor display capabilities
+   send monitor-relative event coordinates
+   handle SIGINT gracefully
+- Network:
+   add Unix-domain socket support
+   advertise window forwarding in the "window" namespace
+   send the correct disconnect packet type in (non-)backwards compatible mode
+   flush the write queue before closing the connection
+   don't send pings to servers that don't support them
+   expose the minimum protocol version in the hello
+   match upstream's "protocol-version" capability renaming
+- Documentation and testing:
+   mockserver: advertise the rencodeplus packet encoder
+   mockserver: send an empty file capability
+   mockserver: accept the legacy client packet names
+   mockserver: document using it with an xpra 6.5.x client
 
 * Sat Aug 01 2026 Antoine Martin <antoine@xpra.org> 0.2.2-1
 - Platforms, build and packaging:
