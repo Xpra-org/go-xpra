@@ -15,6 +15,7 @@ jobs:
     env:
       UPX_VERSION: "5.2.0"
       UPX_SHA256: "3db5d3294707439db97866feab8d75d800f028f48481a40547411824da4288a1"
+      CYCLONEDX_GOMOD_VERSION: "1.12.0"
     strategy:
       matrix:
         include:
@@ -66,6 +67,28 @@ jobs:
           else
             tar -C build -czf "dist/go-xpra-${GOOS}-${GOARCH}.tar.gz" "${binary}"
           fi
+
+      - name: Install cyclonedx-gomod
+        run: go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v${CYCLONEDX_GOMOD_VERSION}"
+
+      # The SBOM comes from the module graph rather than the binary: UPX hides
+      # the embedded build info. GOOS and GOARCH make it apply the same build
+      # constraints as the build, so each platform lists only what it links.
+      - name: Generate SBOM
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          sbom="dist/go-xpra-${GOOS}-${GOARCH}.cdx.json"
+          "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -licenses -std \
+            -main cmd/go-xpra \
+            -output "${sbom}" .
+          # License detection guesses "GPL-3.0+" from the LICENSE text, so
+          # declare the license the packaging states instead.
+          jq '.metadata.component.licenses = [{"license": {"id": "GPL-3.0-only"}}]
+            | del(.metadata.component.evidence)' "${sbom}" > "${sbom}.tmp"
+          mv "${sbom}.tmp" "${sbom}"
 
       - name: Upload build
         uses: actions/upload-artifact@v7

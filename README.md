@@ -14,8 +14,9 @@ is pure Go with no cgo.
 ## Download
 
 Prebuilt binaries are available directly from GitHub on each
-[release page](https://github.com/Xpra-org/go-xpra/releases). Linux packages are also available
-from the Xpra repositories under the package name `go-xpra`; see the
+[release page](https://github.com/Xpra-org/go-xpra/releases), each with a CycloneDX SBOM
+(`go-xpra-<os>-<arch>.cdx.json`) listing the modules it was built from. Linux packages are also
+available from the Xpra repositories under the package name `go-xpra`; see the
 [Xpra download setup instructions](https://github.com/Xpra-org/xpra/wiki/Download).
 
 Building from source needs Go 1.25.0 or newer, the version the `go` directive in `go.mod` states.
