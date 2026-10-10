@@ -35,6 +35,10 @@ type Window struct {
 
 	// icon is owned by this process and only touched on the window thread.
 	icon syscall.Handle
+
+	// onScreen is where the content area last was in screen coordinates, as
+	// the window thread saw it, so that a move can tell what it uncovered.
+	onScreen rect
 }
 
 var _ ui.Window = (*Window)(nil)
@@ -278,6 +282,44 @@ func (w *Window) Paint(x, y, width, height int, pixels []byte, rowstride int, fo
 	}
 	w.d.post(func() { invalidateRect(w.hwnd, &damaged) })
 	return nil
+}
+
+// moved runs on the window thread whenever the content area has a new screen
+// position, and repaints it if part of it was off the desktop before.
+//
+// Painting is clipped to the desktop, so whatever part of the window was
+// outside it never reached the screen. The desktop composition does not ask
+// for that part when the window is moved back in: it slides the image it
+// already has, blank edge included. Our buffer still holds those pixels, so
+// the cure is local and needs nothing from the server. With sharing=combine,
+// this is every window another client drags across onto this one's screens.
+func (w *Window) moved(x, y, width, height int) {
+	previous := w.onScreen
+	w.onScreen = rect{
+		Left: int32(x), Top: int32(y),
+		Right: int32(x + width), Bottom: int32(y + height),
+	}
+	if previous == (rect{}) || previous == w.onScreen {
+		return
+	}
+	if !virtualScreen().contains(previous) {
+		invalidateRect(w.hwnd, nil)
+	}
+}
+
+// virtualScreen is the bounding rectangle of all monitors.
+func virtualScreen() rect {
+	left, top := systemMetrics(smXVirtualScreen), systemMetrics(smYVirtualScreen)
+	return rect{
+		Left: int32(left), Top: int32(top),
+		Right:  int32(left + systemMetrics(smCxVirtualScreen)),
+		Bottom: int32(top + systemMetrics(smCyVirtualScreen)),
+	}
+}
+
+func (r rect) contains(other rect) bool {
+	return other.Left >= r.Left && other.Top >= r.Top &&
+		other.Right <= r.Right && other.Bottom <= r.Bottom
 }
 
 // print draws the whole window into a device context of someone else's

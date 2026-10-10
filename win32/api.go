@@ -117,6 +117,8 @@ const (
 	dpiPerMonitorAware = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, (HANDLE)-4
 	smCxCursor         = 13
 	smCyCursor         = 14
+	smXVirtualScreen   = 76
+	smYVirtualScreen   = 77
 	smCxVirtualScreen  = 78
 	smCyVirtualScreen  = 79
 	monitorInfoPrimary = 0x1

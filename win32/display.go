@@ -424,6 +424,7 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 
 	case wmWindowPosChanged:
 		if x, y, width, height, ok := clientGeometry(w.hwnd); ok {
+			w.moved(x, y, width, height)
 			d.emit(ui.Configure{Window: w.ID(), X: x, Y: y, Width: width, Height: height})
 		}
 
