@@ -47,10 +47,11 @@ type Window struct {
 	x, y, width, height int
 	overrideRedirect    bool
 
-	// Until the window is mapped, its requested minimized state is published
-	// as a property by Map: the window manager's requests only work on a
-	// window it already manages.
+	// Until the window is mapped, its requested minimized state and the
+	// states asked of it are published as properties by Map: the window
+	// manager's requests only work on a window it already manages.
 	mapped, minimized bool
+	initialStates     map[string]bool
 }
 
 var _ ui.Window = (*Window)(nil)
@@ -168,11 +169,13 @@ func (w *Window) Map() {
 }
 
 // publishInitialState tells the window manager whether to start the window
-// minimized. Override-redirect windows are mapped or unmapped directly.
+// minimized, and which other states to start it in. Override-redirect windows
+// are mapped or unmapped directly.
 func (w *Window) publishInitialState() {
 	if w.overrideRedirect {
 		return
 	}
+	w.publishInitialNetWMState()
 	state := uint(icccm.StateNormal)
 	if w.minimized {
 		state = icccm.StateIconic
