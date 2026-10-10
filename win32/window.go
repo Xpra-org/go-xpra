@@ -39,9 +39,27 @@ type Window struct {
 	// onScreen is where the content area last was in screen coordinates, as
 	// the window thread saw it, so that a move can tell what it uncovered.
 	onScreen rect
+
+	// mapped and minimized are the client's view, kept on its goroutine, so
+	// that a window the server wants minimized from the start is shown that
+	// way rather than appearing and then shrinking away.
+	mapped, minimized bool
+
+	// pending is the outer frame of the last move the server asked for while
+	// the window was minimized. Windows applies such a move to the minimized
+	// window only, and a restore would bring back the earlier position, so it
+	// is held back for the restore. restoring keeps that intermediate position
+	// from being reported to the server. Both live on the window thread.
+	pending   *rect
+	restoring bool
+
+	// iconic is whether the window is minimized, as last reported by WM_SIZE
+	// on the window thread.
+	iconic bool
 }
 
 var _ ui.Window = (*Window)(nil)
+var _ ui.StatefulWindow = (*Window)(nil)
 
 // NewWindow creates an unmapped top-level window whose content area is the
 // given geometry.
@@ -179,8 +197,14 @@ func (w *Window) SetIcon(image *ui.Icon) error {
 
 // Map shows the window.
 func (w *Window) Map() {
+	w.mapped = true
 	command := int32(swShow)
-	if w.overrideRedirect {
+	switch {
+	case w.minimized && w.overrideRedirect:
+		return
+	case w.minimized:
+		command = swShowMinNoActive
+	case w.overrideRedirect:
 		command = swShowNoActivate
 	}
 	w.d.post(func() { showWindow(w.hwnd, command) })
@@ -196,12 +220,84 @@ func (w *Window) Raise() {
 }
 
 // Minimize changes the native Win32 show state without affecting geometry.
+//
+// A menu or tooltip has no minimized state worth the name, so it is hidden and
+// shown instead, which is what a sharing=combine server means when it marks one
+// that has left this client's area as iconic.
 func (w *Window) Minimize(minimized bool) {
-	command := int32(swRestore)
-	if minimized {
-		command = swMinimize
+	w.minimized = minimized
+	if !w.mapped {
+		// Map shows it in the right state.
+		return
 	}
-	w.d.post(func() { showWindow(w.hwnd, command) })
+	switch {
+	case w.overrideRedirect && minimized:
+		w.d.post(func() { showWindow(w.hwnd, swHide) })
+	case w.overrideRedirect:
+		w.d.post(func() { showWindow(w.hwnd, swShowNoActivate) })
+	case minimized:
+		w.d.post(func() { showWindow(w.hwnd, swMinimize) })
+	default:
+		w.d.post(w.restore)
+	}
+}
+
+// restore un-minimizes the window on the window thread, to wherever the server
+// last moved it.
+func (w *Window) restore() {
+	if !isIconic(w.hwnd) {
+		// Restoring a window that is not minimized would un-maximize it.
+		return
+	}
+	target := w.pending
+	w.pending = nil
+	if target == nil {
+		showWindow(w.hwnd, swRestore)
+		return
+	}
+	w.restoring = true
+	showWindow(w.hwnd, swRestore)
+	w.restoring = false
+	if isZoomed(w.hwnd) {
+		// It was maximized when it was minimized and is maximized again,
+		// which wins over a position: report the geometry it now has.
+		w.d.configured(w)
+		return
+	}
+	setWindowPos(w.hwnd, 0, target.Left, target.Top,
+		target.Right-target.Left, target.Bottom-target.Top, swpNoZOrder|swpNoActivate)
+}
+
+// SetState applies the states WindowStates advertises.
+func (w *Window) SetState(state string, enabled bool) {
+	if w.overrideRedirect {
+		// Always on top already, and with no frame to maximize.
+		return
+	}
+	switch state {
+	case "maximized":
+		w.d.post(func() {
+			// A maximize would also restore a minimized window, which is
+			// the iconic state's business.
+			if isIconic(w.hwnd) || isZoomed(w.hwnd) == enabled {
+				return
+			}
+			if enabled {
+				showWindow(w.hwnd, swMaximize)
+			} else {
+				showWindow(w.hwnd, swRestore)
+			}
+		})
+	case "above":
+		after := hwndNoTopMost
+		if enabled {
+			after = hwndTopMost
+		}
+		w.d.post(func() {
+			setWindowPos(w.hwnd, syscall.Handle(after), 0, 0, 0, 0,
+				swpNoMove|swpNoSize|swpNoActivate)
+		})
+	}
 }
 
 // Destroy releases the window. Its pixels go with it, being ordinary memory.
@@ -225,6 +321,10 @@ func (w *Window) MoveResize(x, y, width, height int) error {
 		return err
 	}
 	w.d.post(func() {
+		if isIconic(w.hwnd) {
+			w.pending = &outer
+			return
+		}
 		setWindowPos(w.hwnd, 0, outer.Left, outer.Top,
 			outer.Right-outer.Left, outer.Bottom-outer.Top, swpNoZOrder|swpNoActivate)
 	})

@@ -97,7 +97,7 @@ func TestChallengeReplyAcceptsSuffixedDigest(t *testing.T) {
 // treats as mandatory.
 func TestBuildHello(t *testing.T) {
 	setBackwardsCompatible(t, true)
-	caps := buildHello("", false)
+	caps := buildHello("", false, nil)
 	encoded, err := rencodeplus.Encode([]any{"hello", caps})
 	if err != nil {
 		t.Fatalf("the hello does not encode: %v", err)
@@ -200,7 +200,7 @@ func TestBuildHello(t *testing.T) {
 
 func TestBuildHelloWithoutCompatibility(t *testing.T) {
 	setBackwardsCompatible(t, false)
-	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false)})
+	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false, nil)})
 	if err != nil {
 		t.Fatalf("encoding hello: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestBuildHelloWithoutCompatibility(t *testing.T) {
 }
 
 func TestBuildHelloClipboardCapability(t *testing.T) {
-	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", true)})
+	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", true, nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestHelloIncludesPerMonitorCapabilities(t *testing.T) {
 
 func TestBuildHelloUsesExplicitUsername(t *testing.T) {
 	t.Setenv("USER", "environment-user")
-	got := buildHello("url-user", false)
+	got := buildHello("url-user", false, nil)
 	if username := helloString(got, "username"); username != "url-user" {
 		t.Errorf("username = %q, want url-user", username)
 	}
@@ -319,7 +319,7 @@ func TestBuildHelloUsesExplicitUsername(t *testing.T) {
 
 func TestBuildHelloFallsBackToEnvironmentUsername(t *testing.T) {
 	t.Setenv("USER", "environment-user")
-	got := buildHello("", false)
+	got := buildHello("", false, nil)
 	if username := helloString(got, "username"); username != "environment-user" {
 		t.Errorf("username = %q, want environment-user", username)
 	}
@@ -394,7 +394,7 @@ func TestPingsStopWhenAServerReHelloDropsTheCapability(t *testing.T) {
 func TestBuildHelloMinProtocolVersion(t *testing.T) {
 	for _, compatible := range []bool{true, false} {
 		setBackwardsCompatible(t, compatible)
-		encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false)})
+		encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false, nil)})
 		if err != nil {
 			t.Fatalf("encoding hello: %v", err)
 		}

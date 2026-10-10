@@ -15,6 +15,14 @@ type Configure struct {
 	X, Y, Width, Height int
 }
 
+// Minimized reports that a window entered or left the desktop's minimized
+// state, whoever asked for it: the user, or the client through
+// Window.Minimize. Backends emit it only for an actual change.
+type Minimized struct {
+	Window    WindowID
+	Minimized bool
+}
+
 // CloseRequest is the user asking for a window to go away, through the frame's
 // close button or its equivalent. Nothing is closed locally: the request goes to
 // the server, and the window disappears when the server says so.
@@ -81,3 +89,4 @@ func (Button) isEvent()          {}
 func (Key) isEvent()             {}
 func (Focus) isEvent()           {}
 func (ClipboardChange) isEvent() {}
+func (Minimized) isEvent()       {}

@@ -37,7 +37,7 @@ const challengeSaltLen = 32
 // non-obvious keys carry the server-side reference that explains them. Anything
 // not advertised is simply never sent to us, which is how this client avoids
 // having to handle unsupported packet families such as audio.
-func buildHello(username string, clipboard bool) rencodeplus.Dict {
+func buildHello(username string, clipboard bool, windowStates []string) rencodeplus.Dict {
 	caps := rencodeplus.Dict{
 		{Key: "version", Value: clientVersion},
 		{Key: "client_type", Value: "go"},
@@ -131,10 +131,13 @@ func buildHello(username string, clipboard bool) rencodeplus.Dict {
 		// "override-redirect" is included because a server with backwards
 		// compatibility disabled marks OR windows there rather than by using a
 		// distinct packet type (xpra/server/subsystem/window.py:602).
+		// "iconic" is also how a sharing=combine server tells us a window has
+		// left our area of its display (xpra/server/source/window.py:40), and
+		// the backend adds whichever other states it can apply.
 		{Key: "metadata", Value: rencodeplus.Dict{
-			{Key: "supported", Value: []string{
-				"title", "window-type", "size-constraints", "override-redirect",
-			}},
+			{Key: "supported", Value: append([]string{
+				"title", "window-type", "size-constraints", "override-redirect", "iconic",
+			}, windowStates...)},
 		}},
 
 		// Advertising only one digest forces the server to choose it.

@@ -25,6 +25,12 @@ type Display struct {
 	wmProtocols    xproto.Atom
 	wmDeleteWindow xproto.Atom
 
+	// wmState is the ICCCM property a window manager keeps up to date with
+	// whether it has iconified a window. iconic holds what it last said for
+	// each of ours, and like the atom belongs to the event reader goroutine.
+	wmState xproto.Atom
+	iconic  map[xproto.Window]bool
+
 	// blackGC is the graphics context every window draws through. Pixel
 	// uploads do not consult the GC's colours, so one shared context suffices
 	// for all windows of the root depth; the black foreground only matters
@@ -70,6 +76,10 @@ func Open() (*Display, error) {
 	if d.wmDeleteWindow, err = xprop.Atm(X, "WM_DELETE_WINDOW"); err != nil {
 		return nil, fmt.Errorf("interning WM_DELETE_WINDOW: %w", err)
 	}
+	if d.wmState, err = xprop.Atm(X, "WM_STATE"); err != nil {
+		return nil, fmt.Errorf("interning WM_STATE: %w", err)
+	}
+	d.iconic = map[xproto.Window]bool{}
 	if err := d.createGC(); err != nil {
 		return nil, err
 	}

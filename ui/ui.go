@@ -211,3 +211,18 @@ type Window interface {
 	// ConverterFor.
 	Paint(x, y, width, height int, pixels []byte, rowstride int, format string) error
 }
+
+// WindowStateProvider is implemented by displays which can apply some of the
+// boolean window states xpra sends as window metadata, beyond the minimized
+// state every backend has. WindowStates names them using xpra's metadata keys
+// ("maximized", "above", ...), and the client advertises exactly those, so the
+// server never sends a state the backend would ignore. The windows such a
+// display creates implement StatefulWindow.
+type WindowStateProvider interface {
+	WindowStates() []string
+}
+
+// StatefulWindow applies one of the states its display's WindowStates names.
+type StatefulWindow interface {
+	SetState(state string, enabled bool)
+}

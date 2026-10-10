@@ -75,6 +75,7 @@ type Display struct {
 var _ ui.Display = (*Display)(nil)
 var _ ui.SystemTrayProvider = (*Display)(nil)
 var _ ui.MonitorProvider = (*Display)(nil)
+var _ ui.WindowStateProvider = (*Display)(nil)
 
 // Open starts the window thread.
 //
@@ -139,6 +140,11 @@ func (d *Display) Monitors() []ui.Monitor {
 		})
 	}
 	return monitors
+}
+
+// WindowStates names the window states Win32 can apply directly.
+func (d *Display) WindowStates() []string {
+	return []string{"maximized", "above"}
 }
 
 // Bell plays a real tone without blocking the client or window thread. Win32
@@ -422,11 +428,21 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 			return 1
 		}
 
-	case wmWindowPosChanged:
-		if x, y, width, height, ok := clientGeometry(w.hwnd); ok {
-			w.moved(x, y, width, height)
-			d.emit(ui.Configure{Window: w.ID(), X: x, Y: y, Width: width, Height: height})
+	case wmSize:
+		// Every minimize and restore comes through here, whether the user,
+		// show-desktop or the server asked for it, and so does nothing else
+		// that changes the minimized state.
+		if minimized := wparam == sizeMinimized; minimized != w.iconic {
+			w.iconic = minimized
+			d.emit(ui.Minimized{Window: w.ID(), Minimized: minimized})
 		}
+
+	case wmWindowPosChanged:
+		if w.restoring {
+			// A restore on its way to the position the server asked for.
+			break
+		}
+		d.configured(w)
 
 	case wmClose:
 		// The server owns the decision: it closes the window by sending a
@@ -496,6 +512,15 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 		return 0
 	}
 	return defWindowProc(w.hwnd, uint32(message), wparam, lparam)
+}
+
+// configured reports where the window's content area now is, on the window
+// thread.
+func (d *Display) configured(w *Window) {
+	if x, y, width, height, ok := clientGeometry(w.hwnd); ok {
+		w.moved(x, y, width, height)
+		d.emit(ui.Configure{Window: w.ID(), X: x, Y: y, Width: width, Height: height})
+	}
 }
 
 // pointerButton reports a button and keeps the pointer captured for as long as

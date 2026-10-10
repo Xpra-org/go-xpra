@@ -405,6 +405,23 @@ func (d *Display) windowDidBecomeKey(_ objc.ID, _ objc.SEL, notification objc.ID
 	}
 }
 
+// windowDidMiniaturize and windowDidDeminiaturize report the window entering
+// and leaving the Dock, however that came about.
+func (d *Display) windowDidMiniaturize(_ objc.ID, _ objc.SEL, notification objc.ID) {
+	d.windowMinimized(notification, true)
+}
+
+func (d *Display) windowDidDeminiaturize(_ objc.ID, _ objc.SEL, notification objc.ID) {
+	d.windowMinimized(notification, false)
+}
+
+func (d *Display) windowMinimized(notification objc.ID, minimized bool) {
+	win := notification.Send(sel_object)
+	if w := d.windows[win]; w != nil {
+		d.emit(ui.Minimized{Window: w.ID(), Minimized: minimized})
+	}
+}
+
 func (d *Display) screenParametersChanged(_ objc.ID, _ objc.SEL, _ objc.ID) {
 	d.updateReferenceHeight()
 }
@@ -444,6 +461,8 @@ var (
 	sel_windowDidResize              = objc.RegisterName("windowDidResize:")
 	sel_windowDidMove                = objc.RegisterName("windowDidMove:")
 	sel_windowDidBecomeKey           = objc.RegisterName("windowDidBecomeKey:")
+	sel_windowDidMiniaturize         = objc.RegisterName("windowDidMiniaturize:")
+	sel_windowDidDeminiaturize       = objc.RegisterName("windowDidDeminiaturize:")
 	sel_screenParamsChanged          = objc.RegisterName("screenParametersChanged:")
 	sel_object                       = objc.RegisterName("object")
 	sel_contentRectForFrameRect      = objc.RegisterName("contentRectForFrameRect:")
@@ -504,6 +523,8 @@ func (d *Display) registerClasses() error {
 			{Cmd: sel_windowDidResize, Fn: d.windowDidResize},
 			{Cmd: sel_windowDidMove, Fn: d.windowDidMove},
 			{Cmd: sel_windowDidBecomeKey, Fn: d.windowDidBecomeKey},
+			{Cmd: sel_windowDidMiniaturize, Fn: d.windowDidMiniaturize},
+			{Cmd: sel_windowDidDeminiaturize, Fn: d.windowDidDeminiaturize},
 			{Cmd: sel_screenParamsChanged, Fn: d.screenParametersChanged},
 			{Cmd: sel_trayExit, Fn: d.trayExit},
 		},

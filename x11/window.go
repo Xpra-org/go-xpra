@@ -24,7 +24,8 @@ const eventMask = xproto.EventMaskStructureNotify |
 	xproto.EventMaskPointerMotion |
 	xproto.EventMaskKeyPress |
 	xproto.EventMaskKeyRelease |
-	xproto.EventMaskFocusChange
+	xproto.EventMaskFocusChange |
+	xproto.EventMaskPropertyChange
 
 // Window is one forwarded xpra window.
 //
@@ -45,6 +46,12 @@ type Window struct {
 
 	x, y, width, height int
 	overrideRedirect    bool
+
+	// Until the window is mapped, the states asked of it are kept here and
+	// published as properties by Map: the window manager's requests only work
+	// on a window it already manages.
+	mapped, minimized bool
+	initialStates     map[string]bool
 }
 
 var _ ui.Window = (*Window)(nil)
@@ -152,7 +159,14 @@ func netWMIcon(icon *ui.Icon) (ewmh.WmIcon, error) {
 }
 
 // Map shows the window.
-func (w *Window) Map() { w.win.Map() }
+func (w *Window) Map() {
+	w.mapped = true
+	if w.minimized && w.overrideRedirect {
+		return
+	}
+	w.publishInitialState()
+	w.win.Map()
+}
 
 // Raise asks the window manager to activate the window and also issues a
 // direct stacking request, which covers override-redirect windows.
@@ -167,6 +181,11 @@ func (w *Window) Raise() {
 // window to restore it. Override-redirect popups have no window manager, so
 // map/unmap is their equivalent.
 func (w *Window) Minimize(minimized bool) {
+	w.minimized = minimized
+	if !w.mapped {
+		// Map starts it in the right state.
+		return
+	}
 	if w.overrideRedirect {
 		if minimized {
 			w.win.Unmap()

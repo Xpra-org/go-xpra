@@ -40,6 +40,8 @@ var (
 	procShowWindow                    = user32.NewProc("ShowWindow")
 	procSetWindowText                 = user32.NewProc("SetWindowTextW")
 	procSetWindowPos                  = user32.NewProc("SetWindowPos")
+	procIsIconic                      = user32.NewProc("IsIconic")
+	procIsZoomed                      = user32.NewProc("IsZoomed")
 	procAdjustWindowRect              = user32.NewProc("AdjustWindowRectEx")
 	procGetClientRect                 = user32.NewProc("GetClientRect")
 	procClientToScreen                = user32.NewProc("ClientToScreen")
@@ -104,13 +106,18 @@ const (
 
 	swShow             = 5
 	swShowNoActivate   = 4
+	swHide             = 0
+	swMaximize         = 3
 	swMinimize         = 6
+	swShowMinNoActive  = 7
 	swRestore          = 9
 	swpNoSize          = 0x0001
 	swpNoMove          = 0x0002
 	swpNoZOrder        = 0x0004
 	swpNoActivate      = 0x0010
 	hwndTop            = 0           // HWND_TOP
+	hwndTopMost        = ^uintptr(0) // (HWND)-1, HWND_TOPMOST
+	hwndNoTopMost      = ^uintptr(1) // (HWND)-2, HWND_NOTOPMOST
 	hwndMessage        = ^uintptr(2) // (HWND)-3, the parent of message-only windows
 	idcArrow           = 32512
 	idiApplication     = 32512
@@ -140,6 +147,8 @@ const (
 	wmSetCursor        = 0x0020
 	wmContextMenu      = 0x007B
 	wmWindowPosChanged = 0x0047
+	wmSize             = 0x0005
+	sizeMinimized      = 1 // WM_SIZE wparam
 	wmPrintClient      = 0x0318
 	wmSetIcon          = 0x0080
 	wmKeyDown          = 0x0100
@@ -486,6 +495,16 @@ func setWindowText(hwnd syscall.Handle, title *uint16) {
 func setWindowPos(hwnd, insertAfter syscall.Handle, x, y, width, height int32, flags uint32) {
 	procSetWindowPos.Call(uintptr(hwnd), uintptr(insertAfter),
 		uintptr(x), uintptr(y), uintptr(width), uintptr(height), uintptr(flags))
+}
+
+func isIconic(hwnd syscall.Handle) bool {
+	r, _, _ := procIsIconic.Call(uintptr(hwnd))
+	return r != 0
+}
+
+func isZoomed(hwnd syscall.Handle) bool {
+	r, _, _ := procIsZoomed.Call(uintptr(hwnd))
+	return r != 0
 }
 
 // adjustWindowRect grows a content rectangle into the outer rectangle a window

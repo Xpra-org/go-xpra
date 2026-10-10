@@ -42,11 +42,15 @@ type Client struct {
 	display ui.Display
 	verbose bool
 
-	windows   map[int64]ui.Window   // xpra window id -> local window
-	byLocal   map[ui.WindowID]int64 // local window id -> xpra window id
-	monitors  []ui.Monitor          // valid monitor layout advertised in hello
-	focused   int64
-	clipboard ui.Clipboard
+	windows      map[int64]ui.Window   // xpra window id -> local window
+	byLocal      map[ui.WindowID]int64 // local window id -> xpra window id
+	monitors     []ui.Monitor          // valid monitor layout advertised in hello
+	states       []string              // window states advertised in hello, beyond "iconic"
+	iconified    map[int64]bool        // windows the local desktop has minimized
+	serverIconic map[int64]bool        // the iconic state the server last asked for
+	iconifyDue   chan int64            // windows whose minimizing is due to be reported
+	focused      int64
+	clipboard    ui.Clipboard
 
 	clipboardReady       bool
 	clipboardCanSend     bool
@@ -86,6 +90,7 @@ func New(conn *protocol.Conn, display ui.Display, verbose bool, username, passwo
 		password:          password,
 		windows:           map[int64]ui.Window{},
 		byLocal:           map[ui.WindowID]int64{},
+		iconifyDue:        make(chan int64, 16),
 		clipboardRequests: map[int64]clipboardRequest{},
 		quit:              make(chan struct{}),
 		disconnect:        make(chan string, 1),
@@ -132,6 +137,9 @@ func (c *Client) Run() error {
 				return errors.New("lost the connection to the local display")
 			}
 			c.handleUIEvent(event)
+
+		case wid := <-c.iconifyDue:
+			c.sendIconified(wid)
 
 		case <-c.pingTicks:
 			c.send("ping", time.Now().UnixMilli())
@@ -207,7 +215,11 @@ func (c *Client) debugf(format string, args ...any) {
 }
 
 func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
-	caps := buildHello(c.username, c.clipboard != nil)
+	c.states = nil
+	if provider, ok := c.display.(ui.WindowStateProvider); ok {
+		c.states = provider.WindowStates()
+	}
+	caps := buildHello(c.username, c.clipboard != nil, c.states)
 	displayCaps := rencodeplus.Dict{
 		{Key: "show-desktop", Value: true},
 		{Key: "monitor-relative", Value: true},
@@ -643,6 +655,7 @@ func (c *Client) handleNewWindow(packet protocol.Packet, overrideRedirect bool) 
 		return
 	}
 	window.SetTitle(metadata.Str("title"))
+	c.applyStates(wid, window, metadata)
 	window.Map()
 
 	c.windows[wid] = window
@@ -676,6 +689,8 @@ func (c *Client) handleLostWindow(packet protocol.Packet) {
 
 func (c *Client) forgetWindow(wid int64, window ui.Window) {
 	delete(c.byLocal, window.ID())
+	delete(c.iconified, wid)
+	delete(c.serverIconic, wid)
 	delete(c.windows, wid)
 	if c.focused == wid {
 		c.focused = 0
@@ -707,6 +722,30 @@ func (c *Client) handleMetadata(packet protocol.Packet) {
 	metadata := packet.Dict(2)
 	if metadata.Has("title") {
 		window.SetTitle(metadata.Str("title"))
+	}
+	c.applyStates(wid, window, metadata)
+}
+
+// applyStates applies whichever window states the metadata carries. Only the
+// keys that are present change anything, which suits both a new window's full
+// metadata and the partial updates that follow it.
+func (c *Client) applyStates(wid int64, window ui.Window, metadata protocol.Dict) {
+	if metadata.Has("iconic") {
+		iconic := metadata.Bool("iconic")
+		if c.serverIconic == nil {
+			c.serverIconic = map[int64]bool{}
+		}
+		c.serverIconic[wid] = iconic
+		window.Minimize(iconic)
+	}
+	stateful, ok := window.(ui.StatefulWindow)
+	if !ok {
+		return
+	}
+	for _, state := range c.states {
+		if metadata.Has(state) {
+			stateful.SetState(state, metadata.Bool(state))
+		}
 	}
 }
 
@@ -909,6 +948,8 @@ func (c *Client) handleUIEvent(event ui.Event) {
 	switch e := event.(type) {
 	case ui.Configure:
 		c.handleConfigure(e)
+	case ui.Minimized:
+		c.handleMinimized(e)
 	case ui.CloseRequest:
 		c.handleCloseRequest(e)
 	case ui.ExitRequest:
@@ -950,6 +991,65 @@ func (c *Client) handleConfigure(e ui.Configure) {
 		config.Set("monitor", monitor)
 	}
 	c.send("window-configure", wid, config)
+}
+
+// iconifyDelay is how long a window has to stay minimized before the server
+// hears about it, as in xpra's own client (XPRA_ICONIFY_LATENCY): a server
+// that minimizes and restores a window in quick succession would otherwise get
+// the first change echoed back after it had already made the second, and
+// unmap the window for every client.
+const iconifyDelay = 150 * time.Millisecond
+
+// handleMinimized reports the desktop minimizing or restoring a window the way
+// xpra's own client does: minimizing is an unmap flagged as an iconification,
+// and restoring is a map.
+//
+// A change that only carries out the server's own "iconic" metadata is not
+// reported. A sharing=combine server sends that metadata just ahead of the
+// move that brings a window back into our area, so a map sent for the restore
+// would carry the stale position, and could move the window back while
+// another client is dragging it. The user restoring a window the server hides
+// from us does get reported, which is how the server knows to hide it again.
+func (c *Client) handleMinimized(e ui.Minimized) {
+	wid, window, ok := c.lookup(e.Window)
+	if !ok || c.iconified[wid] == e.Minimized {
+		return
+	}
+	if c.iconified == nil {
+		c.iconified = map[int64]bool{}
+	}
+	c.iconified[wid] = e.Minimized
+	if expected, known := c.serverIconic[wid]; known && expected == e.Minimized {
+		c.debugf("window %d minimized=%v, as the server asked", wid, e.Minimized)
+		return
+	}
+	if e.Minimized {
+		time.AfterFunc(iconifyDelay, func() {
+			select {
+			case c.iconifyDue <- wid:
+			case <-c.quit:
+			}
+		})
+		return
+	}
+	x, y, width, height := window.Geometry()
+	c.debugf("window %d restored at %d,%d", wid, x, y)
+	mapPacket := []any{"window-map", wid, x, y, width, height,
+		rencodeplus.Dict{}, rencodeplus.Dict{}}
+	if monitor, ok := c.windowMonitorDescriptor(x, y); ok {
+		mapPacket = append(mapPacket, monitor)
+	}
+	c.send(mapPacket...)
+}
+
+// sendIconified tells the server about a minimized window once iconifyDelay
+// has passed, unless it has been restored or destroyed in the meantime.
+func (c *Client) sendIconified(wid int64) {
+	if !c.iconified[wid] || c.serverIconic[wid] {
+		return
+	}
+	c.debugf("window %d minimized", wid)
+	c.send("window-unmap", wid, true, rencodeplus.Dict{{Key: "iconified", Value: true}})
 }
 
 // handleCloseRequest passes the user's close request to the server, which owns

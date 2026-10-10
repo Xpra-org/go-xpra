@@ -6,6 +6,7 @@ import (
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xfixes"
 	"github.com/jezek/xgb/xproto"
+	"github.com/jezek/xgbutil/icccm"
 
 	"github.com/Xpra-org/go-xpra/keysym"
 	"github.com/Xpra-org/go-xpra/ui"
@@ -35,10 +36,17 @@ func (d *Display) translate(event xgb.Event) (ui.Event, bool) {
 		}
 		return nil, false
 	case xproto.PropertyNotifyEvent:
+		if e.Atom == d.wmState {
+			return d.wmStateChanged(e)
+		}
 		if d.clipboard != nil {
 			return d.clipboard.propertyNotify(e)
 		}
 		return nil, false
+	case xproto.DestroyNotifyEvent:
+		delete(d.iconic, e.Window)
+		return nil, false
+
 	case xproto.ConfigureNotifyEvent:
 		return ui.Configure{
 			Window: ui.WindowID(e.Window),
@@ -76,6 +84,32 @@ func (d *Display) translate(event xgb.Event) (ui.Event, bool) {
 		return ui.Focus{Window: ui.WindowID(e.Event)}, true
 	}
 	return nil, false
+}
+
+// wmStateChanged reports the window manager iconifying or restoring one of our
+// windows. A withdrawn window, or one the window manager has not taken on yet,
+// is in neither state and reports nothing.
+func (d *Display) wmStateChanged(e xproto.PropertyNotifyEvent) (ui.Event, bool) {
+	if e.State != xproto.PropertyNewValue {
+		return nil, false
+	}
+	state, err := icccm.WmStateGet(d.X, e.Window)
+	if err != nil {
+		return nil, false
+	}
+	var iconic bool
+	switch state.State {
+	case icccm.StateIconic:
+		iconic = true
+	case icccm.StateNormal:
+	default:
+		return nil, false
+	}
+	if d.iconic[e.Window] == iconic {
+		return nil, false
+	}
+	d.iconic[e.Window] = iconic
+	return ui.Minimized{Window: ui.WindowID(e.Window), Minimized: iconic}, true
 }
 
 // button reports a pointer button. X11 numbers buttons the way xpra forwards
