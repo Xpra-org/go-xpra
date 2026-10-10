@@ -12,14 +12,21 @@ import (
 // createNativeCursor builds a colour HCURSOR from a top-down 32-bit DIB.
 // CreateIconIndirect copies both bitmaps, so they can be deleted immediately
 // after it returns.
+//
+// Pixels of the previous cursor can remain visible outside of a smaller one
+// (seen with VirtualBox), so the cursor is pasted in the top-left corner of a
+// transparent image at least as big as the system cursors, which keeps the
+// hotspot where it is.
 func createNativeCursor(cursor *ui.Cursor) (syscall.Handle, error) {
 	if err := cursor.Validate(); err != nil {
 		return 0, err
 	}
+	width := max(cursor.Width, systemMetrics(smCxCursor))
+	height := max(cursor.Height, systemMetrics(smCyCursor))
 	info := bitmapV5Header{
 		Size:        uint32(unsafe.Sizeof(bitmapV5Header{})),
-		Width:       int32(cursor.Width),
-		Height:      -int32(cursor.Height),
+		Width:       int32(width),
+		Height:      -int32(height),
 		Planes:      1,
 		BitCount:    32,
 		Compression: biBitfields,
@@ -34,9 +41,14 @@ func createNativeCursor(cursor *ui.Cursor) (syscall.Handle, error) {
 		return 0, err
 	}
 	defer deleteObject(colorBitmap)
-	copy(unsafe.Slice((*byte)(bits), len(cursor.Pixels)), cursor.Pixels)
+	padded := unsafe.Slice((*byte)(bits), width*height*ui.BytesPerPixel)
+	clear(padded)
+	stride := cursor.Width * ui.BytesPerPixel
+	for y := range cursor.Height {
+		copy(padded[y*width*ui.BytesPerPixel:], cursor.Pixels[y*stride:(y+1)*stride])
+	}
 
-	maskBitmap, err := createBitmap(int32(cursor.Width), int32(cursor.Height), 1, 1, nil)
+	maskBitmap, err := createClearMask(width, height)
 	if err != nil {
 		return 0, err
 	}

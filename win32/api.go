@@ -115,6 +115,8 @@ const (
 	idcArrow           = 32512
 	idiApplication     = 32512
 	dpiPerMonitorAware = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, (HANDLE)-4
+	smCxCursor         = 13
+	smCyCursor         = 14
 	smCxVirtualScreen  = 78
 	smCyVirtualScreen  = 79
 	monitorInfoPrimary = 0x1
@@ -598,6 +600,18 @@ func createBitmap(width, height int32, planes, bitsPerPixel uint32, bits unsafe.
 		return 0, fmt.Errorf("CreateBitmap: %w", err)
 	}
 	return syscall.Handle(r), nil
+}
+
+// createClearMask builds the monochrome AND mask that goes with a 32-bit
+// colour bitmap. CreateBitmap leaves the contents undefined when it is given
+// no bits, and an uninitialised mask shows left-overs of whatever cursor or
+// icon last used that memory, so hand it an explicitly cleared buffer: an
+// all-zero mask lets the colour bitmap's alpha channel decide everything.
+// Monochrome bitmap rows are padded to a 16-bit boundary.
+func createClearMask(width, height int) (syscall.Handle, error) {
+	stride := (width + 15) / 16 * 2
+	bits := make([]byte, stride*height)
+	return createBitmap(int32(width), int32(height), 1, 1, unsafe.Pointer(&bits[0]))
 }
 
 func createIconIndirect(info *iconInfo) (syscall.Handle, error) {

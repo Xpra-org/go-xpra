@@ -35,7 +35,7 @@ func createNativeIcon(icon *ui.Icon) (syscall.Handle, error) {
 	defer deleteObject(colorBitmap)
 	copy(unsafe.Slice((*byte)(bits), len(icon.Pixels)), icon.Pixels)
 
-	maskBitmap, err := createBitmap(int32(icon.Width), int32(icon.Height), 1, 1, nil)
+	maskBitmap, err := createClearMask(icon.Width, icon.Height)
 	if err != nil {
 		return 0, err
 	}
