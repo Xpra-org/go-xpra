@@ -362,7 +362,9 @@ func globalLock(memory syscall.Handle) (unsafe.Pointer, error) {
 	if r == 0 {
 		return nil, fmt.Errorf("GlobalLock: %w", err)
 	}
-	return unsafe.Pointer(r), nil
+	// The block lives in the Win32 heap, not the Go heap, so the GC never moves
+	// it; reinterpreting the bits avoids vet's uintptr->unsafe.Pointer warning.
+	return *(*unsafe.Pointer)(unsafe.Pointer(&r)), nil
 }
 
 func globalUnlock(memory syscall.Handle) { procGlobalUnlock.Call(uintptr(memory)) }
