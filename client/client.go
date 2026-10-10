@@ -210,6 +210,7 @@ func (c *Client) sendHello(challengeResponse string, clientSalt []byte) error {
 	caps := buildHello(c.username, c.clipboard != nil)
 	displayCaps := rencodeplus.Dict{
 		{Key: "show-desktop", Value: true},
+		{Key: "monitor-relative", Value: true},
 	}
 	if provider, ok := c.display.(ui.DesktopSizeProvider); ok {
 		if width, height, valid := provider.DesktopSize(); valid {
