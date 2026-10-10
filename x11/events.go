@@ -81,9 +81,33 @@ func (d *Display) translate(event xgb.Event) (ui.Event, bool) {
 		return d.key(e.Event, e.Detail, e.State, false), true
 
 	case xproto.FocusInEvent:
+		if !realFocusChange(e.Mode, e.Detail) {
+			return nil, false
+		}
 		return ui.Focus{Window: ui.WindowID(e.Event)}, true
+	case xproto.FocusOutEvent:
+		if !realFocusChange(e.Mode, e.Detail) {
+			return nil, false
+		}
+		return ui.FocusLost{Window: ui.WindowID(e.Event)}, true
 	}
 	return nil, false
+}
+
+// realFocusChange filters out the focus events that do not move the keyboard
+// focus to or from one of our windows: a window manager grabbing the keyboard
+// for a moment, while the user drags a frame, say, and the ones about the
+// pointer or child windows rather than the window itself.
+func realFocusChange(mode, detail byte) bool {
+	if mode == xproto.NotifyModeGrab || mode == xproto.NotifyModeUngrab {
+		return false
+	}
+	switch detail {
+	case xproto.NotifyDetailInferior, xproto.NotifyDetailPointer,
+		xproto.NotifyDetailPointerRoot, xproto.NotifyDetailNone:
+		return false
+	}
+	return true
 }
 
 // wmStateChanged reports the window manager iconifying or restoring one of our

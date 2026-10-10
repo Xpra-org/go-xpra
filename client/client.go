@@ -49,6 +49,8 @@ type Client struct {
 	iconified    map[int64]bool        // windows the local desktop has minimized
 	serverIconic map[int64]bool        // the iconic state the server last asked for
 	iconifyDue   chan int64            // windows whose minimizing is due to be reported
+	focusLostDue chan struct{}         // a lost focus is due to be reported
+	focusLosing  bool                  // focusLostDue has a report on its way
 	focused      int64
 	clipboard    ui.Clipboard
 
@@ -91,6 +93,7 @@ func New(conn *protocol.Conn, display ui.Display, verbose bool, username, passwo
 		windows:           map[int64]ui.Window{},
 		byLocal:           map[ui.WindowID]int64{},
 		iconifyDue:        make(chan int64, 16),
+		focusLostDue:      make(chan struct{}, 1),
 		clipboardRequests: map[int64]clipboardRequest{},
 		quit:              make(chan struct{}),
 		disconnect:        make(chan string, 1),
@@ -137,6 +140,9 @@ func (c *Client) Run() error {
 				return errors.New("lost the connection to the local display")
 			}
 			c.handleUIEvent(event)
+
+		case <-c.focusLostDue:
+			c.sendFocusLost()
 
 		case wid := <-c.iconifyDue:
 			c.sendIconified(wid)
@@ -964,6 +970,8 @@ func (c *Client) handleUIEvent(event ui.Event) {
 		c.handleKey(e)
 	case ui.Focus:
 		c.handleFocus(e)
+	case ui.FocusLost:
+		c.handleFocusLost(e)
 	case ui.ClipboardChange:
 		c.handleClipboardChange(e)
 	}

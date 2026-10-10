@@ -75,6 +75,12 @@ type Focus struct {
 	Window WindowID
 }
 
+// FocusLost is a window losing the keyboard focus, to another window of ours
+// or to anything else on the desktop.
+type FocusLost struct {
+	Window WindowID
+}
+
 // ClipboardChange reports new UTF-8 text in the ordinary desktop clipboard.
 // Empty text is meaningful: it clears the remote clipboard too.
 type ClipboardChange struct {
@@ -88,5 +94,6 @@ func (Motion) isEvent()          {}
 func (Button) isEvent()          {}
 func (Key) isEvent()             {}
 func (Focus) isEvent()           {}
+func (FocusLost) isEvent()       {}
 func (ClipboardChange) isEvent() {}
 func (Minimized) isEvent()       {}

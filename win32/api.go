@@ -141,6 +141,7 @@ const (
 	wmDestroy          = 0x0002
 	wmNull             = 0x0000
 	wmSetFocus         = 0x0007
+	wmKillFocus        = 0x0008
 	wmPaint            = 0x000F
 	wmClose            = 0x0010
 	wmEraseBkgnd       = 0x0014

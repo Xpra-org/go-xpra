@@ -1,6 +1,8 @@
 package client
 
 import (
+	"time"
+
 	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/rencodeplus"
 	"github.com/Xpra-org/go-xpra/ui"
@@ -95,4 +97,41 @@ func (c *Client) handleFocus(e ui.Focus) {
 	}
 	c.focused = wid
 	c.send("window-focus", wid, []string{})
+}
+
+// focusLostDelay gives another of our windows the chance to take the focus
+// before the server is told that none has it, as xpra's own client does
+// (xpra/client/subsystem/window/focus.py): moving between two forwarded
+// windows then sends only the new one.
+const focusLostDelay = 20 * time.Millisecond
+
+// handleFocusLost forgets the focused window, so that focusing it again is
+// reported, and tells the server shortly afterwards unless another of our
+// windows has taken the focus by then.
+func (c *Client) handleFocusLost(e ui.FocusLost) {
+	wid, _, ok := c.lookup(e.Window)
+	if !ok || c.focused != wid {
+		return
+	}
+	c.focused = 0
+	if c.focusLosing || c.focusLostDue == nil {
+		return
+	}
+	c.focusLosing = true
+	time.AfterFunc(focusLostDelay, func() {
+		select {
+		case c.focusLostDue <- struct{}{}:
+		case <-c.quit:
+		}
+	})
+}
+
+// sendFocusLost tells the server that none of our windows has the focus.
+func (c *Client) sendFocusLost() {
+	c.focusLosing = false
+	if c.focused != 0 {
+		return
+	}
+	c.debugf("focus lost")
+	c.send("window-focus", int64(0), []string{})
 }

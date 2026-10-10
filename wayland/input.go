@@ -200,6 +200,9 @@ func (d *Display) keyboardEnter(e client.KeyboardEnterEvent) {
 }
 
 func (d *Display) keyboardLeave(client.KeyboardLeaveEvent) {
+	if w := d.keyboardFocus; w != nil {
+		d.emit(ui.FocusLost{Window: w.ID()})
+	}
 	d.keyboardFocus = nil
 }
 

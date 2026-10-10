@@ -462,6 +462,10 @@ func (d *Display) windowProc(hwnd, message, wparam, lparam uintptr) uintptr {
 		d.emit(ui.Focus{Window: w.ID()})
 		return 0
 
+	case wmKillFocus:
+		d.emit(ui.FocusLost{Window: w.ID()})
+		return 0
+
 	case wmMouseMove:
 		x, y := clientPos(w.hwnd, lparam)
 		d.emit(ui.Motion{Window: w.ID(), X: x, Y: y})

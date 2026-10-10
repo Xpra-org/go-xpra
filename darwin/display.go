@@ -405,6 +405,13 @@ func (d *Display) windowDidBecomeKey(_ objc.ID, _ objc.SEL, notification objc.ID
 	}
 }
 
+func (d *Display) windowDidResignKey(_ objc.ID, _ objc.SEL, notification objc.ID) {
+	win := notification.Send(sel_object)
+	if w := d.windows[win]; w != nil {
+		d.emit(ui.FocusLost{Window: w.ID()})
+	}
+}
+
 // windowDidMiniaturize and windowDidDeminiaturize report the window entering
 // and leaving the Dock, however that came about.
 func (d *Display) windowDidMiniaturize(_ objc.ID, _ objc.SEL, notification objc.ID) {
@@ -461,6 +468,7 @@ var (
 	sel_windowDidResize              = objc.RegisterName("windowDidResize:")
 	sel_windowDidMove                = objc.RegisterName("windowDidMove:")
 	sel_windowDidBecomeKey           = objc.RegisterName("windowDidBecomeKey:")
+	sel_windowDidResignKey           = objc.RegisterName("windowDidResignKey:")
 	sel_windowDidMiniaturize         = objc.RegisterName("windowDidMiniaturize:")
 	sel_windowDidDeminiaturize       = objc.RegisterName("windowDidDeminiaturize:")
 	sel_screenParamsChanged          = objc.RegisterName("screenParametersChanged:")
@@ -523,6 +531,7 @@ func (d *Display) registerClasses() error {
 			{Cmd: sel_windowDidResize, Fn: d.windowDidResize},
 			{Cmd: sel_windowDidMove, Fn: d.windowDidMove},
 			{Cmd: sel_windowDidBecomeKey, Fn: d.windowDidBecomeKey},
+			{Cmd: sel_windowDidResignKey, Fn: d.windowDidResignKey},
 			{Cmd: sel_windowDidMiniaturize, Fn: d.windowDidMiniaturize},
 			{Cmd: sel_windowDidDeminiaturize, Fn: d.windowDidDeminiaturize},
 			{Cmd: sel_screenParamsChanged, Fn: d.screenParametersChanged},
