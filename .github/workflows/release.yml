@@ -33,7 +33,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          # go.mod states the oldest Go that builds this (ci.yml checks it);
+          # releases ship with the current toolchain and its fixes.
+          go-version: stable
           cache: true
 
       - name: Install UPX
