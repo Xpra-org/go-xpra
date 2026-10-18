@@ -32,11 +32,11 @@ func envBool(name string, fallback bool) bool {
 
 // MinProtocolVersion is the oldest peer we are prepared to talk to, advertised
 // as the hello "protocol-version" capability and run through the remote's
-// protocol_compat_check (xpra/util/version.py:120) to decide whether it can
-// keep talking to us.
+// protocol_compat_check (xpra/util/version.py) to decide whether it can keep
+// talking to us.
 //
-// It mirrors xpra.net.common.MIN_PROTOCOL_VERSION, except that xpra lowers its
-// own value to (5, 1) in backwards compatible mode. We do not: this client only
-// implements the modern packet shapes, and BackwardsCompatible merely adds
-// legacy spellings on top, so the floor stays where it is either way.
-var MinProtocolVersion = [...]int{6, 5}
+// xpra v8 uses (7, 0) in backwards compatible mode and (8, 0) otherwise. We
+// stay at (7, 0) either way: this client supports v7 servers, and
+// BackwardsCompatible merely adds legacy spellings on top of the modern packet
+// shapes, so the floor does not depend on it.
+var MinProtocolVersion = [...]int{7, 0}

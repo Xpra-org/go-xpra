@@ -403,7 +403,7 @@ func TestBuildHelloMinProtocolVersion(t *testing.T) {
 			t.Fatalf("decoding hello: %v", err)
 		}
 		got := protocol.Packet(decoded.([]any)).Dict(1)["protocol-version"]
-		if want := []any{int64(6), int64(5)}; !reflect.DeepEqual(got, want) {
+		if want := []any{int64(7), int64(0)}; !reflect.DeepEqual(got, want) {
 			t.Errorf("backwards compatible %v: protocol-version = %#v, want %#v", compatible, got, want)
 		}
 	}

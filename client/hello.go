@@ -16,11 +16,12 @@ import (
 
 // clientVersion is what we report in the hello.
 //
-// The server runs version_compat_check (xpra/util/version.py:108) over this and
-// rejects anything below 3.0 or unparseable. Claiming the version we were
-// written against takes the "identical major.minor" fast path on a matching
-// server and the "newer remote version should work" path on anything else.
-const clientVersion = "6.6"
+// The server runs version_compat_check (xpra/util/version.py) over this and
+// rejects anything below its MIN_PROTOCOL_VERSION: 7.0 on v8, or 8.0 when the
+// v8 server runs with XPRA_BACKWARDS_COMPATIBLE=0. Claiming 8.0 takes the
+// "identical major.minor" path on v8 and the "newer remote version should work"
+// path on v7, so both accept us in either mode.
+const clientVersion = "8.0"
 
 // digestName is the only challenge digest we implement. Advertising just this
 // one in both digest lists forces the server's choose_digest
