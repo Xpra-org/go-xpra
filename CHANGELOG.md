@@ -1,11 +1,18 @@
 # Changelog
-## [0.2.3] 2026-09-24
+## [0.2.3] 2026-10-18
 * Platforms, build and packaging:
   * [fix the Debian golang installation](https://github.com/Xpra-org/go-xpra/commit/6c5db1b1889ec7b48626b228fe92f34502fb3732)
   * [add macOS support](https://github.com/Xpra-org/go-xpra/commit/268889d5f1ce8b2c98b7b2b346653e5f90351f5b)
   * [add the native macOS port](https://github.com/Xpra-org/go-xpra/commit/1395869b8bbd7a03accf2aa0fc410f3b0d91227e)
   * [add CycloneDX SBOMs to the release builds](https://github.com/Xpra-org/go-xpra/commit/71c4d7c60d3fb0b2ff405518941109c8cdec97e0)
 * Features:
+  * [support v8 xpra servers](https://github.com/Xpra-org/go-xpra/commit/07d694188242a904d87d539fcb143f9dd9442695)
+  * [handle more window states](https://github.com/Xpra-org/go-xpra/commit/eedcb81275a3fb1a327ae2d74b97d05589cfc28b)
+  * [(un)focus events](https://github.com/Xpra-org/go-xpra/commit/f4e7290dfd7689278933acc78c6cbf14449efcbf)
+  * [minimized windows](https://github.com/Xpra-org/go-xpra/commit/11ce0395548e5eb4fe653352c2a5438a55d08575) and [iconification](https://github.com/Xpra-org/go-xpra/commit/7803ee78df2bc7f17284022f3219739a58affd05)
+  * [clip to the desktop](https://github.com/Xpra-org/go-xpra/commit/538b32b4852d65acf1913608e716d9f14a69eacf)
+  * [pad cursors](https://github.com/Xpra-org/go-xpra/commit/e59bc84f09b90c019d949776402062e7ac282a8d)
+  * [monitor relative coordinates](https://github.com/Xpra-org/go-xpra/commit/c8d61466773bcbd109d4a899c29b49a79e0978fa)
   * [add mmap screen update support](https://github.com/Xpra-org/go-xpra/commit/38459b387046128fe922395f79aa1e71201ba3cf)
   * [add bidirectional UTF-8 text clipboard synchronization on X11, Wayland and Windows](https://github.com/Xpra-org/go-xpra/commit/80c0fcbdeec949d0debbaebb3a754bae351bb763)
   * [add a Windows notification-area session icon with an Exit menu](https://github.com/Xpra-org/go-xpra/commit/8f63dba1a6da560c4d9272f3a60757292ee17bf4)

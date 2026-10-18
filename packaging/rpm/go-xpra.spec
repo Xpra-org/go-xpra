@@ -60,13 +60,20 @@ go test ./...
 %{_mandir}/man1/%{name}.1*
 
 %changelog
-* Thu Sep 24 2026 Antoine Martin <antoine@xpra.org> 0.2.3-1
+* Sun Oct 18 2026 Antoine Martin <antoine@xpra.org> 0.2.3-1
 - Platforms, build and packaging:
    fix the Debian golang installation
    add macOS support
    add the native macOS port
    add CycloneDX SBOMs to the release builds
 - Features:
+   support v8 xpra servers
+   handle more window states
+   (un)focus events
+   minimized windows and iconification
+   clip to the desktop
+   pad cursors
+   monitor relative coordinates
    add mmap screen update support
    add bidirectional UTF-8 text clipboard synchronization on X11, Wayland and Windows
    add a Windows notification-area session icon with an Exit menu
