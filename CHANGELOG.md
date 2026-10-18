@@ -5,6 +5,7 @@
   * [add macOS support](https://github.com/Xpra-org/go-xpra/commit/268889d5f1ce8b2c98b7b2b346653e5f90351f5b)
   * [add the native macOS port](https://github.com/Xpra-org/go-xpra/commit/1395869b8bbd7a03accf2aa0fc410f3b0d91227e)
   * [add CycloneDX SBOMs to the release builds](https://github.com/Xpra-org/go-xpra/commit/71c4d7c60d3fb0b2ff405518941109c8cdec97e0)
+  * [build releases with the current stable Go](https://github.com/Xpra-org/go-xpra/commit/b5de4fbf1093827968529ecaa73d6536bf51b532)
 * Features:
   * [support v8 xpra servers](https://github.com/Xpra-org/go-xpra/commit/07d694188242a904d87d539fcb143f9dd9442695)
   * [handle more window states](https://github.com/Xpra-org/go-xpra/commit/eedcb81275a3fb1a327ae2d74b97d05589cfc28b)

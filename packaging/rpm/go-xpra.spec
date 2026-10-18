@@ -66,6 +66,7 @@ go test ./...
    add macOS support
    add the native macOS port
    add CycloneDX SBOMs to the release builds
+   build releases with the current stable Go
 - Features:
    support v8 xpra servers
    handle more window states
