@@ -22,12 +22,13 @@ import (
 	"unicode"
 
 	"github.com/Xpra-org/go-xpra/client"
+	appversion "github.com/Xpra-org/go-xpra/internal/version"
 	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/ui"
 )
 
 const (
-	version        = "0.2.3"
+	version        = appversion.Version
 	defaultTCPPort = "14500"
 	defaultSSHPort = "22"
 	defaultWSPort  = "80"

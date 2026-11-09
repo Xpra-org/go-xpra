@@ -10,18 +10,14 @@ import (
 	"os"
 	"strings"
 
+	appversion "github.com/Xpra-org/go-xpra/internal/version"
 	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/rencodeplus"
 )
 
-// clientVersion is what we report in the hello.
-//
-// The server runs version_compat_check (xpra/util/version.py) over this and
-// rejects anything below its MIN_PROTOCOL_VERSION: 7.0 on v8, or 8.0 when the
-// v8 server runs with XPRA_BACKWARDS_COMPATIBLE=0. Claiming 8.0 takes the
-// "identical major.minor" path on v8 and the "newer remote version should work"
-// path on v7, so both accept us in either mode.
-const clientVersion = "8.0"
+// clientVersion reports the go-xpra application version in the hello.
+// The server validates protocol compatibility separately via "protocol-version".
+const clientVersion = appversion.Version
 
 // digestName is the only challenge digest we implement. Advertising just this
 // one in both digest lists forces the server's choose_digest

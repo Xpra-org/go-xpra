@@ -110,7 +110,7 @@ func TestBuildHello(t *testing.T) {
 	got := packet.Dict(1)
 
 	if got.Str("version") == "" {
-		t.Error("version is required: the server disconnects without it")
+		t.Error("version must identify the client application")
 	}
 	if !got.Has("encoders") {
 		t.Error("encoders is required: the server disconnects if encoder negotiation fails")
