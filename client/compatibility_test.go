@@ -7,16 +7,7 @@ import (
 	"github.com/Xpra-org/go-xpra/ui"
 )
 
-func setBackwardsCompatible(t *testing.T, enabled bool) {
-	t.Helper()
-	old := protocol.BackwardsCompatible
-	protocol.BackwardsCompatible = enabled
-	t.Cleanup(func() { protocol.BackwardsCompatible = old })
-}
-
-func TestLegacySpecialPacketTypesDisabled(t *testing.T) {
-	setBackwardsCompatible(t, false)
-
+func TestLegacySpecialPacketTypesIgnored(t *testing.T) {
 	client := &Client{
 		windows: map[int64]ui.Window{},
 		quit:    make(chan struct{}),
@@ -44,8 +35,7 @@ func TestLegacySpecialPacketTypesDisabled(t *testing.T) {
 	}
 }
 
-func TestLegacyAliasDisabled(t *testing.T) {
-	setBackwardsCompatible(t, false)
+func TestLegacyAliasIgnored(t *testing.T) {
 	display := &ringingDisplay{}
 	client := &Client{display: display}
 	args := []any{

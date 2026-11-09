@@ -92,14 +92,6 @@ func (c *Client) sendClipboardToken() {
 	}
 	data := []byte(c.clipboardText)
 	inline := len(data) <= maxClipboardTokenBytes
-	if protocol.BackwardsCompatible {
-		packet := []any{"clipboard-token", clipboardSelection, clipboardTargets}
-		if inline {
-			packet = append(packet, "UTF8_STRING", "UTF8_STRING", 8, "bytes", data, true, true)
-		}
-		c.send(packet...)
-		return
-	}
 	options := rencodeplus.Dict{
 		{Key: "claim", Value: true},
 		{Key: "greedy", Value: true},
@@ -111,28 +103,6 @@ func (c *Client) sendClipboardToken() {
 		})
 	}
 	c.send("clipboard-data", clipboardSelection, options)
-}
-
-func (c *Client) handleClipboardToken(packet protocol.Packet) {
-	if len(packet) < 2 || packet.Str(1) != clipboardSelection || !c.mayReceiveClipboard() {
-		return
-	}
-	claim := true
-	if len(packet) >= 10 {
-		claim = packet.Bool(8)
-	}
-	if !claim {
-		return
-	}
-	c.beginRemoteClipboard()
-	targets := valueStrings(packetValue(packet, 2))
-	if len(packet) >= 8 {
-		if text, ok := clipboardWireText(packet.Str(3), packet.Int(5), packet.Str(6), packetValue(packet, 7)); ok {
-			c.applyRemoteClipboard(text)
-			return
-		}
-	}
-	c.requestRemoteClipboard(targets)
 }
 
 func (c *Client) handleClipboardData(packet protocol.Packet) {

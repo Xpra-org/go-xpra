@@ -105,9 +105,7 @@ terminal prompt as its fallback, or the native Windows credentials dialog. An SS
 consumed by SSH and is not reused for this protocol challenge. Pass `-v` to log every window event
 and unhandled packet type.
 
-Legacy packet reception is enabled by default, matching Xpra itself. Set
-`XPRA_BACKWARDS_COMPATIBLE=0` to accept only the Xpra 6.5+ packet types; outgoing
-packets always use the modern names.
+The client requires an Xpra 7.0 or later server and only uses the modern packet names.
 
 On Linux, `--backend` picks between the two backends and defaults to `auto`, which uses X11 when
 `$DISPLAY` is set and Wayland otherwise. X11 wins on purpose: a session running XWayland is still

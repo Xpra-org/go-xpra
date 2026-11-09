@@ -8,8 +8,7 @@ import (
 )
 
 func TestHandleNotificationShow(t *testing.T) {
-	setBackwardsCompatible(t, true)
-	for _, packetType := range []string{"notify_show", "notification-show"} {
+	for _, packetType := range []string{"notification-show"} {
 		t.Run(packetType, func(t *testing.T) {
 			client := &Client{}
 			packet := protocol.Packet{
@@ -36,10 +35,9 @@ func TestHandleNotificationShow(t *testing.T) {
 }
 
 func TestHandleNotificationShowWithoutApplication(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	client := &Client{}
 	packet := protocol.Packet{
-		"notify_show", "", int64(42), "", int64(0), "", "Session ready", "",
+		"notification-show", "", int64(42), "", int64(0), "", "Session ready", "",
 	}
 
 	output := captureLogs(t, func() {
@@ -51,8 +49,7 @@ func TestHandleNotificationShowWithoutApplication(t *testing.T) {
 }
 
 func TestHandleNotificationClose(t *testing.T) {
-	setBackwardsCompatible(t, true)
-	for _, packetType := range []string{"notify_close", "notification-close"} {
+	for _, packetType := range []string{"notification-close"} {
 		t.Run(packetType, func(t *testing.T) {
 			client := &Client{verbose: true}
 			output := captureLogs(t, func() {
@@ -66,11 +63,10 @@ func TestHandleNotificationClose(t *testing.T) {
 }
 
 func TestHandleNotificationRejectsMalformedPackets(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	client := &Client{}
 	for _, packet := range []protocol.Packet{
-		{"notify_show"},
-		{"notify_close"},
+		{"notification-show"},
+		{"notification-close"},
 	} {
 		output := captureLogs(t, func() {
 			client.handlePacket(packet)

@@ -34,12 +34,11 @@ func cursorPNG(t *testing.T) []byte {
 }
 
 func TestHandleCursor(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	display := &cursorDisplay{}
 	client := &Client{display: display}
 	packet := protocol.Packet{
-		"cursor", "default:png", int64(0), int64(0), int64(2), int64(1),
-		int64(99), int64(-4), int64(7), cursorPNG(t), "pointer",
+		"cursor-data", "png", int64(2), int64(1), int64(99), int64(-4),
+		int64(7), cursorPNG(t), "pointer",
 	}
 
 	client.handlePacket(packet)
@@ -61,36 +60,22 @@ func TestHandleCursor(t *testing.T) {
 	}
 }
 
-func TestHandleCursorReset(t *testing.T) {
-	setBackwardsCompatible(t, true)
-	display := &cursorDisplay{}
-	client := &Client{display: display}
-
-	client.handlePacket(protocol.Packet{"cursor", ""})
-
-	if len(display.calls) != 1 || display.calls[0] != nil {
-		t.Errorf("SetCursor calls = %v, want [nil]", display.calls)
-	}
-}
-
 func TestHandleCursorRejectsInvalidPackets(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	display := &cursorDisplay{}
 	client := &Client{display: display}
 
-	client.handlePacket(protocol.Packet{"cursor", "raw", int64(0), int64(0), int64(1),
-		int64(1), int64(0), int64(0), int64(1), []byte{0, 0, 0, 0}})
-	client.handlePacket(protocol.Packet{"cursor", "png", int64(0)})
-	client.handlePacket(protocol.Packet{"cursor", "png", int64(0), int64(0), int64(1),
-		int64(1), int64(0), int64(0), int64(1), []byte("not png")})
+	client.handlePacket(protocol.Packet{"cursor-data", "raw", int64(1), int64(1),
+		int64(0), int64(0), int64(1), []byte{0, 0, 0, 0}, ""})
+	client.handlePacket(protocol.Packet{"cursor-data", "png", int64(0)})
+	client.handlePacket(protocol.Packet{"cursor-data", "png", int64(1), int64(1),
+		int64(0), int64(0), int64(1), []byte("not png"), ""})
 
 	if len(display.calls) != 0 {
 		t.Errorf("SetCursor called %d times for invalid packets", len(display.calls))
 	}
 }
 
-func TestHandleModernCursorPackets(t *testing.T) {
-	setBackwardsCompatible(t, false)
+func TestHandleCursorDataAndDefault(t *testing.T) {
 	display := &cursorDisplay{}
 	client := &Client{display: display}
 
@@ -99,7 +84,7 @@ func TestHandleModernCursorPackets(t *testing.T) {
 		int64(0), int64(0), int64(7), cursorPNG(t), "legacy",
 	})
 	if len(display.calls) != 0 {
-		t.Fatal("legacy cursor packet was accepted with compatibility disabled")
+		t.Fatal("legacy cursor packet was accepted")
 	}
 
 	client.handlePacket(protocol.Packet{

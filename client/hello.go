@@ -75,12 +75,9 @@ func buildHello(username string, clipboard bool, windowStates []string) rencodep
 		{Key: "show-desktop", Value: true},
 		{Key: "ping", Value: true},
 
-		// Request PNG cursor forwarding. The server uses cursor-data and
-		// cursor-default unless compatibility mode asks for the legacy cursor
-		// packet shape.
+		// Request PNG cursor forwarding, via cursor-data and cursor-default.
 		{Key: "cursor", Value: rencodeplus.Dict{
 			{Key: "encodings", Value: []string{"png"}},
-			{Key: "backwards-compatible", Value: protocol.BackwardsCompatible},
 		}},
 
 		// Receive desktop notifications for logging.
@@ -125,9 +122,8 @@ func buildHello(username string, clipboard bool, windowStates []string) rencodep
 
 		// Restrict window metadata to what we actually apply. Omitting this
 		// gets a much longer default list (xpra/constants.py:132).
-		// "override-redirect" is included because a server with backwards
-		// compatibility disabled marks OR windows there rather than by using a
-		// distinct packet type (xpra/server/subsystem/window.py:602).
+		// "override-redirect" is included because that is how the server
+		// marks OR windows (xpra/server/subsystem/window.py:602).
 		// "iconic" is also how a sharing=combine server tells us a window has
 		// left our area of its display (xpra/server/source/window.py:40), and
 		// the backend adds whichever other states it can apply.
@@ -148,18 +144,6 @@ func buildHello(username string, clipboard bool, windowStates []string) rencodep
 			{Key: "greedy", Value: clipboardSelections},
 			{Key: "want_targets", Value: clipboardSelections},
 			{Key: "preferred-targets", Value: clipboardTargets},
-		})
-	}
-
-	if protocol.BackwardsCompatible {
-		// Legacy capability spellings are only advertised when their matching
-		// packet types are accepted.
-		caps.Set("rencodeplus", true)
-		caps.Set("windows", true)
-		caps.Set("mouse", true)
-		caps.Set("cursors", true)
-		caps.Set("notifications", rencodeplus.Dict{
-			{Key: "enabled", Value: true},
 		})
 	}
 

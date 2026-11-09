@@ -174,14 +174,9 @@ func (c *Client) Disconnect(reason string) {
 	}
 }
 
-// sendDisconnect tells the server why the session is ending, naming the packet
-// the negotiated protocol expects.
+// sendDisconnect tells the server why the session is ending.
 func (c *Client) sendDisconnect(reason string) {
-	packetType := "connection-close"
-	if protocol.BackwardsCompatible {
-		packetType = "disconnect"
-	}
-	c.send(packetType, reason)
+	c.send("connection-close", reason)
 }
 
 // stop ends the run loop, reporting err (nil for a clean exit).
@@ -306,9 +301,9 @@ func monitorCaps(monitors []ui.Monitor) map[int]any {
 }
 
 func (c *Client) handlePacket(packet protocol.Packet) {
-	// A backwards-compatible server sends the legacy packet names and a modern
-	// one sends the current names; normalising here means one case each.
-	switch name := protocol.Canonical(packet.Type()); name {
+	// We advertise protocol-version 7.0, so servers send us the modern packet
+	// names (xpra/net/common.py legacy_peer).
+	switch name := packet.Type(); name {
 	case "hello":
 		c.handleHello(packet)
 	case "challenge":
@@ -323,10 +318,6 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleNotificationClose(packet)
 	case "show-desktop":
 		c.handleShowDesktop(packet)
-	case "cursor":
-		if protocol.BackwardsCompatible {
-			c.handleCursor(packet)
-		}
 	case "cursor-data":
 		c.handleCursorData(packet)
 	case "cursor-default":
@@ -334,10 +325,6 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 
 	case "clipboard-data":
 		c.handleClipboardData(packet)
-	case "clipboard-token":
-		if protocol.BackwardsCompatible {
-			c.handleClipboardToken(packet)
-		}
 	case "clipboard-request":
 		c.handleClipboardRequest(packet)
 	case "clipboard-contents":
@@ -348,19 +335,11 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 		c.handleClipboardEnableSelections(packet)
 	case "clipboard-status":
 		c.handleClipboardStatus(packet)
-	case "set-clipboard-enabled":
-		if protocol.BackwardsCompatible {
-			c.handleClipboardStatus(packet)
-		}
 	case "clipboard-pending-requests":
 		// Progress notification for richer clients with a tray indicator.
 
 	case "window-create":
-		c.handleNewWindow(packet, false)
-	case "new-override-redirect":
-		if protocol.BackwardsCompatible {
-			c.handleNewWindow(packet, true)
-		}
+		c.handleNewWindow(packet)
 	case "window-destroy":
 		c.handleLostWindow(packet)
 	case "window-move-resize":
@@ -381,11 +360,6 @@ func (c *Client) handlePacket(packet protocol.Packet) {
 	case "ping-echo":
 		// Round-trip timing, which this client does not track.
 
-	case "disconnect":
-		if !protocol.BackwardsCompatible {
-			break
-		}
-		fallthrough
 	case "connection-close":
 		reason := packet.Str(1)
 		log.Printf("server disconnected us: %s", reason)
@@ -455,35 +429,6 @@ func (c *Client) handleShowDesktop(packet protocol.Packet) {
 	for _, window := range c.windows {
 		window.Minimize(show)
 	}
-}
-
-// handleCursor applies the session-wide pointer shape. The backwards-
-// compatible packet is
-// [encoding, x, y, width, height, xhot, yhot, serial, pixels, name, ...].
-// A two-item packet asks for the platform default cursor instead.
-func (c *Client) handleCursor(packet protocol.Packet) {
-	if len(packet) <= 2 {
-		c.handleCursorDefault()
-		return
-	}
-	if len(packet) < 10 {
-		log.Printf("ignoring malformed cursor packet")
-		return
-	}
-	encoding := packet.Str(1)
-	if colon := strings.LastIndexByte(encoding, ':'); colon >= 0 {
-		encoding = encoding[colon+1:]
-	}
-	if encoding != "png" {
-		c.debugf("ignoring cursor with unsupported encoding %q", encoding)
-		return
-	}
-	data, ok := packet.Bytes(9)
-	if !ok {
-		log.Printf("ignoring cursor packet with no pixel data")
-		return
-	}
-	c.applyCursorPNG(encoding, data, packet.Int(6), packet.Int(7))
 }
 
 // handleCursorData applies the modern
@@ -611,19 +556,12 @@ func (c *Client) challengePassword(description string) (string, error) {
 
 func (c *Client) handlePing(packet protocol.Packet) {
 	// [echo, echotime, load1, load5, load15, latency_ms, session_id], where
-	// the echo packet is named "ping-echo" by a modern server and "ping_echo"
-	// by a legacy one (xpra/server/subsystem/ping.py, which only registers the
-	// underscored alias in compatibility mode). The load averages and latency
-	// are informational; -1 means "unknown".
-	packetType := "ping-echo"
-	if protocol.BackwardsCompatible {
-		packetType = "ping_echo"
-	}
+	// the load averages and latency are informational; -1 means "unknown".
 	sessionID := ""
 	if len(packet) >= 4 {
 		sessionID = packet.Str(3)
 	}
-	c.send(packetType, packet.Int(1), 0, 0, 0, -1, sessionID)
+	c.send("ping-echo", packet.Int(1), 0, 0, 0, -1, sessionID)
 }
 
 // packetWindowSize reads the width and height shared by the window-create and
@@ -642,14 +580,13 @@ func packetWindowSize(packet protocol.Packet) (width, height int) {
 // handleNewWindow creates a local window for a new remote one.
 //
 // The packet is [wid, x, y, w, h, metadata, client_properties]. Override-
-// redirect windows arrive either under their own packet type or, from a server
-// with backwards compatibility disabled, flagged in the metadata.
-func (c *Client) handleNewWindow(packet protocol.Packet, overrideRedirect bool) {
+// redirect windows are flagged in the metadata.
+func (c *Client) handleNewWindow(packet protocol.Packet) {
 	wid := packet.Int(1)
 	x, y := int(packet.Int(2)), int(packet.Int(3))
 	width, height := packetWindowSize(packet)
 	metadata := packet.Dict(6)
-	overrideRedirect = overrideRedirect || metadata.Bool("override-redirect")
+	overrideRedirect := metadata.Bool("override-redirect")
 
 	if old, ok := c.windows[wid]; ok {
 		// The server reused a window id we still hold; drop the stale one.
@@ -834,14 +771,7 @@ func (c *Client) handleDraw(packet protocol.Packet) {
 		// The mmap writer may reuse this region as soon as it observes the
 		// acknowledgement, so publish the read cursor before queuing the ack.
 		releasePixels()
-		if protocol.BackwardsCompatible {
-			// Xpra 6.5.x puts the packet sequence before the window id.
-			c.send("window-draw-ack", sequence, wid, width, height, decodeTime, message)
-		} else {
-			// Trunk puts the window fields first, consistent with other
-			// window packet types (Xpra commit 4e35bb1b6d).
-			c.send("window-draw-ack", wid, width, height, sequence, decodeTime, message)
-		}
+		c.send("window-ack", wid, width, height, sequence, decodeTime, message)
 	}
 
 	var pixels []byte

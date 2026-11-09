@@ -84,7 +84,6 @@ func receiveOutbound(t *testing.T, conn *protocol.Conn, wantType string) protoco
 }
 
 func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	client, server, window := outboundHarness(t)
 
 	if err := client.sendHello("", nil); err != nil {
@@ -95,7 +94,7 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 	client.handleNewWindow(protocol.Packet{
 		"window-create", int64(7), int64(10), int64(20), int64(2), int64(1),
 		map[string]any{"title": "test"}, map[string]any{},
-	}, false)
+	})
 	windowMap := receiveOutbound(t, server, "window-map")
 	if windowMap.Int(1) != 7 || windowMap.Int(2) != 10 || windowMap.Int(3) != 20 ||
 		windowMap.Int(4) != 2 || windowMap.Int(5) != 1 {
@@ -156,31 +155,28 @@ func TestOutboundPacketsUseModernTypesAndShapes(t *testing.T) {
 		"rgb32", []byte{0, 0, 0, 0}, int64(42), int64(4),
 		map[string]any{"rgb_format": "BGRX"},
 	})
-	drawAck := receiveOutbound(t, server, "window-draw-ack")
-	if drawAck.Int(1) != 42 || drawAck.Int(2) != 7 ||
-		drawAck.Int(3) != 1 || drawAck.Int(4) != 1 || drawAck.Int(5) <= 0 {
-		t.Errorf("window-draw-ack is wrong: %v", drawAck)
+	drawAck := receiveOutbound(t, server, "window-ack")
+	if drawAck.Int(1) != 7 || drawAck.Int(2) != 1 ||
+		drawAck.Int(3) != 1 || drawAck.Int(4) != 42 || drawAck.Int(5) <= 0 {
+		t.Errorf("window-ack is wrong: %v", drawAck)
 	}
 
 	client.handleCloseRequest(ui.CloseRequest{Window: window.id})
 	receiveOutbound(t, server, "window-close")
 
 	client.handlePing(protocol.Packet{"ping", int64(123), int64(0), "session"})
-	receiveOutbound(t, server, "ping_echo")
+	receiveOutbound(t, server, "ping-echo")
 }
 
 func TestPingEchoUsesTheNegotiatedPacketName(t *testing.T) {
 	tests := []struct {
-		name                string
-		backwardsCompatible bool
-		packetType          string
+		name       string
+		packetType string
 	}{
-		{"compatible", true, "ping_echo"},
-		{"modern", false, "ping-echo"},
+		{"modern", "ping-echo"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			setBackwardsCompatible(t, test.backwardsCompatible)
 			client, server, _ := outboundHarness(t)
 			client.handlePing(protocol.Packet{"ping", int64(123), int64(0), "session"})
 			echo := receiveOutbound(t, server, test.packetType)
@@ -193,16 +189,13 @@ func TestPingEchoUsesTheNegotiatedPacketName(t *testing.T) {
 
 func TestExitRequestDisconnectsAndStopsCleanly(t *testing.T) {
 	tests := []struct {
-		name                string
-		backwardsCompatible bool
-		packetType          string
+		name       string
+		packetType string
 	}{
-		{"compatible", true, "disconnect"},
-		{"modern", false, "connection-close"},
+		{"modern", "connection-close"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			setBackwardsCompatible(t, test.backwardsCompatible)
 			client, server, _ := outboundHarness(t)
 			events := make(chan ui.Event, 1)
 			client.display = &exitRequestDisplay{events: events}
@@ -231,16 +224,13 @@ func TestExitRequestDisconnectsAndStopsCleanly(t *testing.T) {
 // the run loop, from whatever goroutine asked for the shutdown.
 func TestDisconnectSendsTheReasonAndStopsCleanly(t *testing.T) {
 	tests := []struct {
-		name                string
-		backwardsCompatible bool
-		packetType          string
+		name       string
+		packetType string
 	}{
-		{"compatible", true, "disconnect"},
-		{"modern", false, "connection-close"},
+		{"modern", "connection-close"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			setBackwardsCompatible(t, test.backwardsCompatible)
 			client, server, _ := outboundHarness(t)
 			client.display = &exitRequestDisplay{events: make(chan ui.Event)}
 			runResult := make(chan error, 1)
@@ -279,8 +269,7 @@ type exitRequestDisplay struct {
 
 func (d *exitRequestDisplay) Events() <-chan ui.Event { return d.events }
 
-func TestWindowDrawAckUsesTrunkShapeWithoutCompatibility(t *testing.T) {
-	setBackwardsCompatible(t, false)
+func TestWindowAckShape(t *testing.T) {
 	client, server, window := outboundHarness(t)
 	client.windows[7] = window
 
@@ -290,27 +279,25 @@ func TestWindowDrawAckUsesTrunkShapeWithoutCompatibility(t *testing.T) {
 		map[string]any{"rgb_format": "BGRX"},
 	})
 
-	drawAck := receiveOutbound(t, server, "window-draw-ack")
+	drawAck := receiveOutbound(t, server, "window-ack")
 	if drawAck.Int(1) != 7 || drawAck.Int(2) != 3 || drawAck.Int(3) != 2 ||
 		drawAck.Int(4) != 42 || drawAck.Int(5) <= 0 || drawAck.Str(6) != "" {
-		t.Errorf("strict window-draw-ack has the wrong shape: %v", drawAck)
+		t.Errorf("window-ack has the wrong shape: %v", drawAck)
 	}
 }
 
 func TestWheelPacketTypeAndShape(t *testing.T) {
 	tests := []struct {
-		name                string
-		backwardsCompatible bool
-		button              int
-		distance            int64
-		packetType          string
+		name       string
+		button     int
+		distance   int64
+		packetType string
 	}{
-		{"compatible", true, 4, 1000, "wheel-motion"},
-		{"modern", false, 7, -1000, "pointer-wheel"},
+		{"wheel-up", 4, 1000, "pointer-wheel"},
+		{"wheel-right", 7, -1000, "pointer-wheel"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			setBackwardsCompatible(t, test.backwardsCompatible)
 			client, server, window := outboundHarness(t)
 			client.windows[7] = window
 			client.byLocal[window.id] = 7
@@ -354,7 +341,6 @@ func TestWheelPacketTypeAndShape(t *testing.T) {
 }
 
 func TestPositionPacketsIncludeMonitorRelativeCoordinates(t *testing.T) {
-	setBackwardsCompatible(t, false)
 	client, server, window := outboundHarness(t)
 	client.monitors = usableMonitors([]ui.Monitor{
 		{}, // invalid monitors must not consume an advertised index
@@ -382,7 +368,7 @@ func TestPositionPacketsIncludeMonitorRelativeCoordinates(t *testing.T) {
 	client.handleNewWindow(protocol.Packet{
 		"window-create", int64(7), int64(-1800), int64(100), int64(640), int64(480),
 		map[string]any{}, map[string]any{},
-	}, false)
+	})
 	windowMap := receiveOutbound(t, server, "window-map")
 	if len(windowMap) != 9 {
 		t.Fatalf("window-map has %d elements, want monitor field at index 8: %v", len(windowMap), windowMap)

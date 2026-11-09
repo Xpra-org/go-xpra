@@ -150,13 +150,7 @@ func (a *mmapArea) helloCaps() rencodeplus.Dict {
 		{Key: "token_index", Value: a.tokenIndex},
 		{Key: "token_bytes", Value: a.tokenBytes},
 	}
-	mmapCaps := rencodeplus.Dict{{Key: "read", Value: area}}
-	if protocol.BackwardsCompatible {
-		for _, entry := range area {
-			mmapCaps.Set(entry.Key, entry.Value)
-		}
-	}
-	return mmapCaps
+	return rencodeplus.Dict{{Key: "read", Value: area}}
 }
 
 func (a *mmapArea) enableFromCaps(caps protocol.Dict) (bool, error) {

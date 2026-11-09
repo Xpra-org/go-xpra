@@ -3,7 +3,6 @@ package client
 import (
 	"time"
 
-	"github.com/Xpra-org/go-xpra/protocol"
 	"github.com/Xpra-org/go-xpra/rencodeplus"
 	"github.com/Xpra-org/go-xpra/ui"
 )
@@ -40,15 +39,11 @@ func (c *Client) handleButton(e ui.Button) {
 		if !e.Pressed {
 			return
 		}
-		packetType := "pointer-wheel"
-		if protocol.BackwardsCompatible {
-			packetType = "wheel-motion"
-		}
 		distance := 1000
 		if e.Button == 5 || e.Button == 7 {
 			distance = -distance
 		}
-		c.send(packetType, wid, e.Button, distance,
+		c.send("pointer-wheel", wid, e.Button, distance,
 			[]any{e.X, e.Y}, []string{}, []int{}, c.pointerProperties(e.X, e.Y))
 		return
 	}

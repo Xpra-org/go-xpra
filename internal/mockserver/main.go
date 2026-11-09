@@ -39,15 +39,6 @@ const (
 // the connection is closed under them.
 const flushTimeout = 2 * time.Second
 
-// legacyNames maps what a backwards-compatible xpra client sends — the
-// default in 6.5.x, see xpra/net/packet_type.py — to the modern names that
-// serve handles. protocol.Canonical only covers the server-to-client ones.
-var legacyNames = map[string]string{
-	"map-window":      "window-map",
-	"close-window":    "window-close",
-	"damage-sequence": "window-draw-ack",
-}
-
 func main() {
 	log.SetFlags(log.Ltime)
 	listen := flag.String("listen", "127.0.0.1:14500", "address to listen on")
@@ -85,11 +76,7 @@ func serve(conn *protocol.Conn) {
 	}()
 
 	for packet := range conn.Packets() {
-		name := packet.Type()
-		if modern, ok := legacyNames[name]; ok {
-			name = modern
-		}
-		switch name {
+		switch packet.Type() {
 		case "hello":
 			log.Printf("<- hello")
 			send(conn, "hello", rencodeplus.Dict{
@@ -115,17 +102,11 @@ func serve(conn *protocol.Conn) {
 			log.Printf("<- window-map %v", []any(packet)[1:])
 			paint(conn)
 
-		case "window-draw-ack":
+		case "window-ack":
 			// The client must never report a decode time of zero: xpra reads
 			// that as a failed paint, so it is worth seeing in the log.
-			sequenceIndex, widIndex, widthIndex, heightIndex := 4, 1, 2, 3
-			// damage-sequence only ever comes in the 6.5.x shape.
-			if protocol.BackwardsCompatible || packet.Type() == "damage-sequence" {
-				sequenceIndex, widIndex, widthIndex, heightIndex = 1, 2, 3, 4
-			}
-			log.Printf("<- window-draw-ack %d wid=%d %dx%d decode=%dus %q",
-				packet.Int(sequenceIndex), packet.Int(widIndex),
-				packet.Int(widthIndex), packet.Int(heightIndex),
+			log.Printf("<- window-ack %d wid=%d %dx%d decode=%dus %q",
+				packet.Int(4), packet.Int(1), packet.Int(2), packet.Int(3),
 				packet.Int(5), packet.Str(6))
 
 		case "window-close":
@@ -133,7 +114,7 @@ func serve(conn *protocol.Conn) {
 			send(conn, "window-destroy", windowID)
 			send(conn, "connection-close", "test over")
 
-		case "ping", "ping_echo", "ping-echo":
+		case "ping", "ping-echo":
 			// Keepalive noise, and not what anyone is watching for.
 
 		default:

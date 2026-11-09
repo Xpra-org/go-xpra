@@ -96,7 +96,6 @@ func TestChallengeReplyAcceptsSuffixedDigest(t *testing.T) {
 // The hello has to encode cleanly and carry the handful of keys the server
 // treats as mandatory.
 func TestBuildHello(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	caps := buildHello("", false, nil)
 	encoded, err := rencodeplus.Encode([]any{"hello", caps})
 	if err != nil {
@@ -128,28 +127,18 @@ func TestBuildHello(t *testing.T) {
 		t.Error("show-desktop must be enabled to receive minimize and restore requests")
 	}
 	cursor := got.Dict("cursor")
-	if cursor == nil || !cursor.Bool("backwards-compatible") {
-		t.Error("the backwards-compatible cursor capability must be enabled")
+	if cursor == nil {
+		t.Fatal("the cursor capability is missing")
 	}
 	cursorEncodings, _ := cursor["encodings"].([]any)
 	if len(cursorEncodings) != 1 || cursorEncodings[0] != "png" {
 		t.Errorf("cursor encodings = %v, want [png]", cursorEncodings)
 	}
-	if !got.Bool("cursors") {
-		t.Error("the legacy cursors capability must be enabled")
-	}
 	if window := got.Dict("window"); window == nil || !window.Bool("enabled") {
 		t.Error("window.enabled must be advertised for window forwarding")
 	}
-	if !got.Bool("windows") {
-		t.Error("the legacy windows capability must be enabled")
-	}
 	if !got.Bool("notification") {
-		t.Error("the modern notification capability must be enabled")
-	}
-	notifications := got.Dict("notifications")
-	if notifications == nil || !notifications.Bool("enabled") {
-		t.Error("the compatibility notifications.enabled capability must be enabled")
+		t.Error("the notification capability must be enabled")
 	}
 	encoding := got.Dict("encoding")
 	if encoding == nil {
@@ -198,8 +187,7 @@ func TestBuildHello(t *testing.T) {
 	}
 }
 
-func TestBuildHelloWithoutCompatibility(t *testing.T) {
-	setBackwardsCompatible(t, false)
+func TestBuildHelloOmitsLegacyCapabilities(t *testing.T) {
 	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false, nil)})
 	if err != nil {
 		t.Fatalf("encoding hello: %v", err)
@@ -217,8 +205,8 @@ func TestBuildHelloWithoutCompatibility(t *testing.T) {
 	if cursor == nil {
 		t.Fatal("modern cursor capability is missing")
 	}
-	if cursor.Bool("backwards-compatible") {
-		t.Error("cursor backwards-compatible capability is enabled")
+	if cursor.Has("backwards-compatible") {
+		t.Error("cursor backwards-compatible capability is advertised")
 	}
 	if window := got.Dict("window"); window == nil || !window.Bool("enabled") {
 		t.Error("window.enabled must be advertised for window forwarding")
@@ -254,7 +242,6 @@ func TestBuildHelloClipboardCapability(t *testing.T) {
 }
 
 func TestHelloIncludesPerMonitorCapabilities(t *testing.T) {
-	setBackwardsCompatible(t, false)
 	client, server, _ := outboundHarness(t)
 	client.display = &monitorHelloDisplay{monitors: []ui.Monitor{
 		{Geometry: ui.Rectangle{}}, // invalid outputs are not advertised
@@ -346,23 +333,19 @@ func TestMachineUUIDIsStable(t *testing.T) {
 
 func TestPingsOnlyStartWhenTheServerAdvertisesThem(t *testing.T) {
 	tests := []struct {
-		name                string
-		backwardsCompatible bool
-		caps                map[string]any
-		want                bool
+		name string
+		caps map[string]any
+		want bool
 	}{
-		{"advertised interval", false, map[string]any{"ping": int64(5)}, true},
-		{"advertised flag", false, map[string]any{"ping": true}, true},
-		{"disabled", false, map[string]any{"ping": int64(0)}, false},
+		{"advertised interval", map[string]any{"ping": int64(5)}, true},
+		{"advertised flag", map[string]any{"ping": true}, true},
+		{"disabled", map[string]any{"ping": int64(0)}, false},
 		// A --minimal server drops the key altogether and warns about every
-		// ping it has no handler for, in either compatibility mode.
-		{"absent", false, map[string]any{}, false},
-		{"absent on a legacy server", true, map[string]any{}, false},
-		{"advertised by a legacy server", true, map[string]any{"ping": int64(5)}, true},
+		// ping it has no handler for.
+		{"absent", map[string]any{}, false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			setBackwardsCompatible(t, test.backwardsCompatible)
 			client, _, _ := outboundHarness(t)
 			client.configurePings(protocol.Dict(test.caps))
 			defer client.stopPings()
@@ -374,7 +357,6 @@ func TestPingsOnlyStartWhenTheServerAdvertisesThem(t *testing.T) {
 }
 
 func TestPingsStopWhenAServerReHelloDropsTheCapability(t *testing.T) {
-	setBackwardsCompatible(t, false)
 	client, _, _ := outboundHarness(t)
 	client.configurePings(protocol.Dict{"ping": true})
 	ticker := client.ping
@@ -388,23 +370,19 @@ func TestPingsStopWhenAServerReHelloDropsTheCapability(t *testing.T) {
 	}
 }
 
-// The advertised protocol floor is what a modern server runs through
-// protocol_compat_check, and it must not soften in backwards compatible mode:
-// the legacy spellings are additive, the packet shapes we understand are not.
+// The advertised protocol floor is what a server runs through
+// protocol_compat_check, and what makes it treat us as a modern peer.
 func TestBuildHelloMinProtocolVersion(t *testing.T) {
-	for _, compatible := range []bool{true, false} {
-		setBackwardsCompatible(t, compatible)
-		encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false, nil)})
-		if err != nil {
-			t.Fatalf("encoding hello: %v", err)
-		}
-		decoded, err := rencodeplus.Decode(encoded)
-		if err != nil {
-			t.Fatalf("decoding hello: %v", err)
-		}
-		got := protocol.Packet(decoded.([]any)).Dict(1)["protocol-version"]
-		if want := []any{int64(7), int64(0)}; !reflect.DeepEqual(got, want) {
-			t.Errorf("backwards compatible %v: protocol-version = %#v, want %#v", compatible, got, want)
-		}
+	encoded, err := rencodeplus.Encode([]any{"hello", buildHello("", false, nil)})
+	if err != nil {
+		t.Fatalf("encoding hello: %v", err)
+	}
+	decoded, err := rencodeplus.Decode(encoded)
+	if err != nil {
+		t.Fatalf("decoding hello: %v", err)
+	}
+	got := protocol.Packet(decoded.([]any)).Dict(1)["protocol-version"]
+	if want := []any{int64(7), int64(0)}; !reflect.DeepEqual(got, want) {
+		t.Errorf("protocol-version = %#v, want %#v", got, want)
 	}
 }

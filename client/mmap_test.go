@@ -121,7 +121,6 @@ func TestMmapReadChunksRejectsMalformedDescriptors(t *testing.T) {
 }
 
 func TestHelloAdvertisesMmapReadArea(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	client, server, _ := outboundHarness(t)
 	client.mmap = &mmapArea{
 		data: make([]byte, 1024), filename: "/tmp/test.mmap",
@@ -136,8 +135,8 @@ func TestHelloAdvertisesMmapReadArea(t *testing.T) {
 	if read == nil || read.Str("file") != "/tmp/test.mmap" || read.Int("size") != 1024 {
 		t.Fatalf("mmap.read capabilities = %#v", read)
 	}
-	if mmapCaps.Str("file") != read.Str("file") {
-		t.Error("legacy unprefixed mmap capabilities are missing")
+	if mmapCaps.Has("file") {
+		t.Error("legacy unprefixed mmap capabilities are advertised")
 	}
 	if token, ok := mmapInteger(read["token"]); !ok || token.Cmp(big.NewInt(12345)) != 0 {
 		t.Errorf("mmap token = %#v", read["token"])
@@ -145,7 +144,6 @@ func TestHelloAdvertisesMmapReadArea(t *testing.T) {
 }
 
 func TestMmapDrawAndRelease(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	client, server, window := outboundHarness(t)
 	client.windows[7] = window
 	client.mmap = &mmapArea{data: make([]byte, 64), enabled: true}
@@ -158,7 +156,7 @@ func TestMmapDrawAndRelease(t *testing.T) {
 			"chunks":     []any{[]any{int64(16), int64(8)}},
 		},
 	})
-	ack := receiveOutbound(t, server, "window-draw-ack")
+	ack := receiveOutbound(t, server, "window-ack")
 	if ack.Int(5) <= 0 {
 		t.Errorf("mmap draw failed: %v", ack)
 	}
@@ -172,7 +170,6 @@ func TestMmapDrawAndRelease(t *testing.T) {
 }
 
 func TestMmapDrawForMissingWindowStillReleasesData(t *testing.T) {
-	setBackwardsCompatible(t, true)
 	client, server, _ := outboundHarness(t)
 	client.mmap = &mmapArea{data: make([]byte, 64), enabled: true}
 
@@ -181,7 +178,7 @@ func TestMmapDrawForMissingWindowStillReleasesData(t *testing.T) {
 		"mmap", []any{[]any{int64(32), int64(4)}}, int64(7), int64(4),
 		map[string]any{"rgb_format": "BGRX"},
 	})
-	ack := receiveOutbound(t, server, "window-draw-ack")
+	ack := receiveOutbound(t, server, "window-ack")
 	if ack.Int(5) != decodeNotFound {
 		t.Errorf("decode time = %d, want %d", ack.Int(5), decodeNotFound)
 	}

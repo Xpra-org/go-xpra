@@ -18,9 +18,8 @@ func (c *recordingClipboard) SetText(text string) error {
 	return c.err
 }
 
-func readyClipboardClient(t *testing.T, compatible bool) (*Client, *protocol.Conn, *recordingClipboard) {
+func readyClipboardClient(t *testing.T) (*Client, *protocol.Conn, *recordingClipboard) {
 	t.Helper()
-	setBackwardsCompatible(t, compatible)
 	c, server, _ := outboundHarness(t)
 	clipboard := &recordingClipboard{}
 	c.clipboard = clipboard
@@ -32,33 +31,21 @@ func readyClipboardClient(t *testing.T, compatible bool) (*Client, *protocol.Con
 }
 
 func TestLocalClipboardPackets(t *testing.T) {
-	for _, compatible := range []bool{true, false} {
-		t.Run(map[bool]string{true: "legacy", false: "modern"}[compatible], func(t *testing.T) {
-			c, server, _ := readyClipboardClient(t, compatible)
-			c.handleClipboardChange(ui.ClipboardChange{Text: "สวัสดี\nworld"})
-			wantType := "clipboard-data"
-			if compatible {
-				wantType = "clipboard-token"
-			}
-			packet := receiveOutbound(t, server, wantType)
-			if packet.Str(1) != clipboardSelection {
-				t.Fatalf("selection = %q", packet.Str(1))
-			}
-			if compatible {
-				if got, _ := packet.Bytes(7); string(got) != "สวัสดี\nworld" {
-					t.Errorf("legacy clipboard data = %q", got)
-				}
-			} else if packet.Dict(2)["data"] == nil {
-				t.Error("modern clipboard packet has no eager data")
-			}
-			// An echo caused by the native SetText notification is suppressed.
-			c.handleClipboardChange(ui.ClipboardChange{Text: "สวัสดี\nworld"})
-		})
+	c, server, _ := readyClipboardClient(t)
+	c.handleClipboardChange(ui.ClipboardChange{Text: "สวัสดี\nworld"})
+	packet := receiveOutbound(t, server, "clipboard-data")
+	if packet.Str(1) != clipboardSelection {
+		t.Fatalf("selection = %q", packet.Str(1))
 	}
+	if packet.Dict(2)["data"] == nil {
+		t.Error("clipboard-data packet has no eager data")
+	}
+	// An echo caused by the native SetText notification is suppressed.
+	c.handleClipboardChange(ui.ClipboardChange{Text: "สวัสดี\nworld"})
 }
 
 func TestRemoteClipboardEagerAndLazy(t *testing.T) {
-	c, server, clipboard := readyClipboardClient(t, false)
+	c, server, clipboard := readyClipboardClient(t)
 	c.handleClipboardData(protocol.Packet{
 		"clipboard-data", "CLIPBOARD", map[string]any{
 			"claim": true,
@@ -89,12 +76,18 @@ func TestRemoteClipboardEagerAndLazy(t *testing.T) {
 }
 
 func TestStaleClipboardReplyIsIgnored(t *testing.T) {
-	c, server, clipboard := readyClipboardClient(t, true)
-	c.handleClipboardToken(protocol.Packet{"clipboard-token", "CLIPBOARD", []any{"UTF8_STRING"}})
+	c, server, clipboard := readyClipboardClient(t)
+	c.handleClipboardData(protocol.Packet{
+		"clipboard-data", "CLIPBOARD", map[string]any{"targets": []any{"UTF8_STRING"}},
+	})
 	request := receiveOutbound(t, server, "clipboard-request")
-	c.handleClipboardToken(protocol.Packet{
-		"clipboard-token", "CLIPBOARD", []any{"UTF8_STRING"},
-		"UTF8_STRING", "UTF8_STRING", int64(8), "bytes", []byte("new"), true, true,
+	c.handleClipboardData(protocol.Packet{
+		"clipboard-data", "CLIPBOARD", map[string]any{
+			"targets": []any{"UTF8_STRING"},
+			"data": map[string]any{
+				"UTF8_STRING": []any{"UTF8_STRING", int64(8), "bytes", []byte("new")},
+			},
+		},
 	})
 	c.handleClipboardContents(protocol.Packet{
 		"clipboard-contents", request.Int(1), "CLIPBOARD", "UTF8_STRING", int64(8), "bytes", []byte("old"), int64(0),
@@ -105,7 +98,7 @@ func TestStaleClipboardReplyIsIgnored(t *testing.T) {
 }
 
 func TestClipboardRequestReplies(t *testing.T) {
-	c, server, _ := readyClipboardClient(t, false)
+	c, server, _ := readyClipboardClient(t)
 	c.handleClipboardChange(ui.ClipboardChange{Text: "local"})
 	receiveOutbound(t, server, "clipboard-data")
 
@@ -124,7 +117,7 @@ func TestClipboardRequestReplies(t *testing.T) {
 }
 
 func TestClipboardDirection(t *testing.T) {
-	c, server, clipboard := readyClipboardClient(t, false)
+	c, server, clipboard := readyClipboardClient(t)
 	c.configureClipboard(protocol.Dict{
 		"direction": "to-server", "selections": []any{"CLIPBOARD"},
 	})
