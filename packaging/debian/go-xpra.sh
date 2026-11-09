@@ -106,6 +106,7 @@ setup_go() {
 	fi
 	read -r arch sha256 <<<"${tarball_info}"
 
+	mkdir -p "${GO_TOOLCHAIN_PATH}"
 	tarball="${GO_TOOLCHAIN_PATH}/go${GO_VERSION}.linux-${arch}.tar.gz"
 	if [ ! -f "${tarball}" ]; then
 		# curl -s hides why it cannot write its output (curl only says
@@ -124,7 +125,8 @@ setup_go() {
 	fi
 	echo "${sha256}  ${tarball}" | sha256sum --check --strict -
 
-	go_root="${GO_TOOLCHAIN_PATH}/go-${GO_VERSION}"
+	# the toolchain path may be shared by builds for other architectures
+	go_root="${GO_TOOLCHAIN_PATH}/go-${GO_VERSION}-${arch}"
 	if [ ! -x "${go_root}/bin/go" ]; then
 		rm -rf -- "${go_root:?}"
 		mkdir -p "${go_root}"
