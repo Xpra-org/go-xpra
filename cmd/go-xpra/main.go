@@ -28,7 +28,6 @@ import (
 )
 
 const (
-	version        = appversion.Version
 	defaultTCPPort = "14500"
 	defaultSSHPort = "22"
 	defaultWSPort  = "80"
@@ -82,7 +81,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("go-xpra %s\n", version)
+		fmt.Printf("go-xpra %s\n", appversion.Full())
 		return
 	}
 	if !noArguments && flag.NArg() != 1 {
