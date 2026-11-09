@@ -2,4 +2,4 @@
 package version
 
 // Version is reported by the command and in the client hello.
-const Version = "0.2.3"
+const Version = "0.3.0"
