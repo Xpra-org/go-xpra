@@ -1,3 +1,10 @@
+go-xpra (0.5.0-1) UNRELEASED; urgency=medium
+
+  * Documentation and testing:
+    add CLAUDE.md
+
+ -- Antoine Martin <antoine@xpra.org>  Mon, 09 Nov 2026 22:59:45 +0700
+
 go-xpra (0.4.0-1) UNRELEASED; urgency=medium
 
   * Network:

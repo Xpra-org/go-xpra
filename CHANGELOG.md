@@ -1,4 +1,8 @@
 # Changelog
+## [0.5.0] 2026-11-09
+* Documentation and testing:
+  * [add CLAUDE.md](https://github.com/Xpra-org/go-xpra/commit/37b436bd7aeee1f1cd54ce6055240c02d67a494d)
+
 ## [0.4.0] 2026-11-09
 * Network:
   * [require an xpra 7.0 or later server and drop the legacy packet names](https://github.com/Xpra-org/go-xpra/commit/96950893120d0c14d40e16b64819b19c23b83611)
