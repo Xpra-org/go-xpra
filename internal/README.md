@@ -37,7 +37,7 @@ whole lifecycle runs end to end.
 One line is worth reading closely:
 
 ```
-<- window-draw-ack 1 wid=1 400x300 decode=1us ""
+<- window-ack 1 wid=1 400x300 decode=1us ""
 ```
 
 The decode time must never be zero. xpra reads a zero as a failed paint, so a client that reports
