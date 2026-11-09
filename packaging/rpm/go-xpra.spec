@@ -25,7 +25,7 @@ local X11 or Wayland desktop. It requires an Xpra 7.0 or later server.
 
 %prep
 sha256=`sha256sum %{SOURCE0} | awk '{print $1}'`
-if [ "${sha256}" != "d7e89255edaeb9c8e2af08d7b3a54e00ba71412d6bfe03a0d7c9b9d42340495b" ]; then
+if [ "${sha256}" != "e03885f3409dbeac663583bb55d1339cd9e912404f28d2cd09939419fb4395cc" ]; then
 	echo "invalid checksum for %{SOURCE0}"
 	exit 1
 fi
