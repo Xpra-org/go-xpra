@@ -30,7 +30,7 @@ fetch() {
 	if command -v curl >/dev/null; then
 		curl -fsSL -o "$2" "$1"
 	elif command -v wget >/dev/null; then
-		wget -q -O "$2" "$1"
+		wget -nv -O "$2" "$1"
 	else
 		echo "neither curl nor wget is available to download $1"
 		exit 1
@@ -108,9 +108,15 @@ setup_go() {
 
 	tarball="${GO_TOOLCHAIN_PATH}/go${GO_VERSION}.linux-${arch}.tar.gz"
 	if [ ! -f "${tarball}" ]; then
+		# curl -s hides why it cannot write its output (curl only says
+		# "error 23"), so create the file first and let the shell report it
+		if ! : >"${tarball}.part"; then
+			echo "cannot write to ${GO_TOOLCHAIN_PATH}:"
+			echo " mount it writable or set GO_TOOLCHAIN_PATH to a writable directory"
+			exit 1
+		fi
 		if ! fetch "https://go.dev/dl/$(basename "${tarball}")" "${tarball}.part"; then
 			rm -f -- "${tarball}.part"
-			df -h "${GO_TOOLCHAIN_PATH}"
 			echo "failed to download go${GO_VERSION} to ${GO_TOOLCHAIN_PATH}"
 			exit 1
 		fi
