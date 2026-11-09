@@ -1,4 +1,10 @@
 # Changelog
+## [0.4.0] 2026-11-09
+* Network:
+  * [require an xpra 7.0 or later server and drop the legacy packet names](https://github.com/Xpra-org/go-xpra/commit/96950893120d0c14d40e16b64819b19c23b83611)
+* Documentation and testing:
+  * [document that an xpra 7.0 or later server is required](https://github.com/Xpra-org/go-xpra/commit/d79d99ed97ba882328cc20aa03313b65c978db0d)
+
 ## [0.2.3] 2026-10-18
 * Platforms, build and packaging:
   * [fix the Debian golang installation](https://github.com/Xpra-org/go-xpra/commit/6c5db1b1889ec7b48626b228fe92f34502fb3732)

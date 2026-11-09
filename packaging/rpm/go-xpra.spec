@@ -4,7 +4,7 @@
 %{!?run_tests:%global run_tests 1}
 
 Name:           go-xpra
-Version:        0.2.3
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Minimal Xpra client written in Go
 
@@ -60,6 +60,12 @@ go test ./...
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Mon Nov 09 2026 Antoine Martin <antoine@xpra.org> 0.4.0-1
+- Network:
+   require an xpra 7.0 or later server and drop the legacy packet names
+- Documentation and testing:
+   document that an xpra 7.0 or later server is required
+
 * Sun Oct 18 2026 Antoine Martin <antoine@xpra.org> 0.2.3-1
 - Platforms, build and packaging:
    fix the Debian golang installation
