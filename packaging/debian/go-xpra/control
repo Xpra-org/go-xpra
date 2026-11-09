@@ -24,3 +24,4 @@ Suggests:
 Description: minimal Xpra client written in Go
  go-xpra connects to an Xpra server over TCP, TLS, WebSocket, or SSH and
  displays forwarded application windows on the local X11 or Wayland desktop.
+ It requires an Xpra 7.0 or later server.

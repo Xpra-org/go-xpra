@@ -6,7 +6,8 @@
 
 A minimal [Xpra](https://xpra.org/) client in Go: it connects to a server over TCP, TLS,
 WebSocket, SSH or a Unix-domain socket and shows the forwarded windows on the local desktop — X11
-or Wayland on Linux, Win32 on Windows, AppKit on macOS.
+or Wayland on Linux, Win32 on Windows, AppKit on macOS. It requires an Xpra 7.0 or later server
+and only speaks the modern packet names; older servers are not supported.
 
 The scope is deliberately small — connect, show windows, forward input — and the implementation
 is pure Go with no cgo.
@@ -104,8 +105,6 @@ password, the client first checks `XPRA_PASSWORD`, then uses `pinentry` on Linux
 terminal prompt as its fallback, or the native Windows credentials dialog. An SSH URL password is
 consumed by SSH and is not reused for this protocol challenge. Pass `-v` to log every window event
 and unhandled packet type.
-
-The client requires an Xpra 7.0 or later server and only uses the modern packet names.
 
 On Linux, `--backend` picks between the two backends and defaults to `auto`, which uses X11 when
 `$DISPLAY` is set and Wayland otherwise. X11 wins on purpose: a session running XWayland is still

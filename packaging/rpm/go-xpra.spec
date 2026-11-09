@@ -21,7 +21,7 @@ Suggests:       sshpass
 %description
 go-xpra is a minimal Xpra client. It connects to an Xpra server over TCP,
 TLS, WebSocket, or SSH and displays forwarded application windows on the
-local X11 or Wayland desktop.
+local X11 or Wayland desktop. It requires an Xpra 7.0 or later server.
 
 %prep
 sha256=`sha256sum %{SOURCE0} | awk '{print $1}'`
