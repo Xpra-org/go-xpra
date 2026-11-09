@@ -8,6 +8,17 @@ explains the design in depth; read it before making structural changes.
 
 ## Commands
 
+On Windows, always build and test from the MSYS2 UCRT64 shell. Its `go` is trimmed and only
+works with `GOROOT=/ucrt64/lib/go`, which `/ucrt64/etc/profile.d/go.sh` sets in a login shell.
+Elsewhere it fails with `go: cannot find GOROOT directory`. From PowerShell or a tool, run:
+
+```powershell
+$env:MSYSTEM='UCRT64'; $env:CHERE_INVOKING='1'; & C:\msys64\usr\bin\bash.exe -lc 'go build ./cmd/go-xpra'
+```
+
+`CHERE_INVOKING=1` keeps the login shell in the current directory. `git` is also only on the
+path inside that shell.
+
 ```shell
 go build ./cmd/go-xpra                       # build the client
 go test ./...                                # all tests (what CI runs, on Linux and Windows)
